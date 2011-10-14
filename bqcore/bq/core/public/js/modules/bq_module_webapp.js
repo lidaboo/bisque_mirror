@@ -168,9 +168,15 @@ BQWebApp.prototype.onerror = function (str) {
 // Selections of resources
 //------------------------------------------------------------------------------
 BQWebApp.prototype.selectFile = function () {
-    var file_button = document.getElementById("webapp_file_button");
-    var file_div = document.getElementById("webapp_file_browser");
-    this.selectTab(file_button, file_div);
+
+    var uploader = Ext.create('BQ.upload.Dialog', {   
+        //title: 'my upload',
+        //maxFiles: 1,
+        //dataset_configs: BQ.upload.DATASET_CONFIGS.PROHIBIT, 
+        listeners: {  'uploaded': function(reslist) { 
+                       this.onResourceSelected(reslist[0]);
+                }, scope: this },              
+    });
 }
 
 BQWebApp.prototype.selectImage = function (resource) {
