@@ -1,10 +1,66 @@
 /*******************************************************************************
 
-  BQ.upload.Panel  - an integrated uploading tool
-  BQ.upload.Dialog 
-  
+  BQ.upload.Panel  - an integrated uploading tool allowing many file uploads
+  BQ.upload.Dialog - uploader in the modal window
 
   Author: Dima Fedorov
+
+------------------------------------------------------------------------------
+  BQ.upload.Dialog:
+------------------------------------------------------------------------------
+  
+  Sends multi-part form with a file and associated tags in XML format
+  form parts should be something like this: file and file_tags
+
+    The tag XML document is in the following form:
+    <resource>
+        <tag name='any tag' value='any value' />
+        <tag name='another' value='new value' />
+    </resource>
+
+
+    The document can also contain special tag for prosessing and additional info:
+    <resource>
+        <tag name='any tag' value='any value' />
+        <tag name='ingest'>
+            
+            Permission setting for imported image as: 'private' or 'published'
+            <tag name='permission' value='private' />
+            or
+            <tag name='permission' value='published' />
+                    
+            Image is a multi-file compressed archive, should be uncompressed and images ingested individually:
+            <tag name='type' value='zip-multi-file' />
+            or
+            Image is a compressed archive containing multiple files composing a time-series image:        
+            <tag name='type' value='zip-time-series' />
+            or
+            Image is a compressed archive containing multiple files composing a z-stack image:                
+            <tag name='type' value='zip-z-stack' />
+            or
+            Image is a compressed archive containing multiple files composing a 5-D image:
+            <tag name='type' value='zip-5d-image' />
+            This tag must have two additional tags with numbers of T and Z planes:
+            <tag name='number_z' value='XXXX' />
+            <tag name='number_t' value='XXXXX' />                
+    
+        </tag>
+    </resource>
+    
+    Example for a file "example.zip":
+    
+    <resource>
+        <tag name='any tag' value='any value' />
+        <tag name='ingest'>
+            <tag name='permission' value='published' />
+            <tag name='type' value='zip-5d-image' />
+            <tag name='number_z' value='XXXX' />
+            <tag name='number_t' value='XXXXX' />
+        </tag>
+    </resource>
+
+------------------------------------------------------------------------------
+
   
   Version: 1
   
@@ -283,7 +339,7 @@ Ext.define('BQ.upload.Item', {
     requires: ['Ext.toolbar.Toolbar', 'Ext.tip.QuickTipManager', 'Ext.tip.QuickTip'],
 
     border: 0,
-    height: 100,
+    height: 110,
     closable: true,
     cls: 'uploaditem',
     bodyStyle: 'padding: 10px',
@@ -1068,7 +1124,7 @@ Ext.define('BQ.upload.Panel', {
 
     testDone : function(nomessage) {
         var total = this.uploadPanel.items.getCount();
-        this.progress.updateProgress( this.files_uploaded/total, BQ.upload.UPLOAD_STRING );
+        this.progress.updateProgress( this.files_uploaded/total, 'Uploaded '+this.files_uploaded+'/'+total );
         
         var e = this.uploadPanel.items.findBy( function(){ return (this.getState && this.getState()<BQ.upload.Item.STATES.DONE); } );
         if (!e && this.files_uploaded==total && !this.all_done) {
