@@ -23,7 +23,8 @@ from bq.core import permission, identity
 from bq.util.paths import data_path
 from imgsrv import ImageServer
 from imgsrv import ProcessToken
-
+import imgcnv
+import bioformats
 
 log = logging.getLogger("bq.image_service")
 
@@ -35,6 +36,19 @@ def get_image_id(url):
 
     id = path.split('/')[-1]
     return id
+
+def get_format_map():
+    xmlout = '<response>' + imgcnv.installed_formats()
+    if bioformats.installed():
+        xmlout += bioformats.installed_formats()
+        xmlout += '</response>'
+    format_tree = etree.XML(xmlout)
+    formats = {}
+    for ex in format_tree.xpath ('./format/codec/tag[@name="extensions"]'):
+        codec = ex.getparent().get('name')
+        for ext in ex.get('value').split('|'):
+            formats.setdefault(ext, []).append(codec)
+    return formats
 
 
 def cache_control (value):
@@ -52,32 +66,35 @@ class image_serviceController(ServiceController):
         workdir= config.get('bisque.image_service.work_dir', data_path('workdir'))
 
         log.info('ROOT=%s images=%s work=%s' % (config.get('bisque.root'), imgdir, workdir))
+        self.format_map = None
 
         self.srv = ImageServer (image_dir=imgdir,
                                 work_dir = workdir,
                                 server_url = server_url)
 
 
+#    def store_blob(self, src, name):
+#        log.info('storing blob %s' % name)
+#        return self.srv.storeBlob(src,name)
 
+#    def new_file(self, src, name, userPerm = permission.PRIVATE):
+#        srv = self.srv
+#        userId = identity.current.user_name
+#        blob_id, path = srv.storeBlob (src=src, name=name, ownerId = userId, permission = userPerm)
+#        url = self.makeurl(str(blob_id))
+#        return dict(src=url)
 
-    def new_file(self, src, name, userPerm = permission.PRIVATE):
-        srv = self.srv
-        userId = identity.current.user_name
-        blob_id, path = srv.storeBlob (src=src, name=name, ownerId = userId, permission = userPerm)
-        url = self.makeurl(str(blob_id))
-        return dict(src=url)
-
-    def new_image(self, src, name, userPerm = permission.PRIVATE, **kw):
-        ''' place the image file in a local '''
-        srv = self.srv
-        userId = identity.current.user_name
-        image_id, path, x, y, ch, z, t = srv.addImage(src=src, name=name, ownerId = userId, permission = userPerm, **kw)
-        if image_id == None:
-            log.debug ("local_service FAILED to create image src=%s, name=%s, owner=%s" %(src,name,userId))
-            return dict()
-        log.debug("new_image %s, %s, %s, %s, %s, %s, %s [%s]"%(str(image_id), path, str(x), str(y), str(ch), str(z), str(t), str(userPerm) ) )           
-        url = self.makeurl( str(image_id) )
-        return dict(src=url, x=x, y=y, ch=ch, z=z, t=t)
+#    def new_image(self, src, name, userPerm = permission.PRIVATE, **kw):
+#        ''' place the image file in a local '''
+#        srv = self.srv
+#        userId = identity.current.user_name
+#        image_id, path, x, y, ch, z, t = srv.addImage(src=src, name=name, ownerId = userId, permission = userPerm, **kw)
+#        if image_id == None:
+#            log.debug ("local_service FAILED to create image src=%s, name=%s, owner=%s" %(src,name,userId))
+#            return dict()
+#        log.debug("new_image %s, %s, %s, %s, %s, %s, %s [%s]"%(str(image_id), path, str(x), str(y), str(ch), str(z), str#(t), str(userPerm) ) )           
+#        url = self.makeurl( str(image_id) )
+#        return dict(src=url, x=x, y=y, ch=ch, z=z, t=t)
 
     def meta(self, imgsrc, **kw):
         id = get_image_id(imgsrc)
@@ -95,34 +112,36 @@ class image_serviceController(ServiceController):
         log.debug('Info doc: %s'%(doc ) )           
         return doc
         
-    def files_exist(self, hashes, **kw):
-        #userId = identity.current.user_name  
-        return self.srv.blobsExist(hashes)
+#    def files_exist(self, hashes, **kw):
+#        #userId = identity.current.user_name  
+#        return self.srv.blobsExist(hashes)
 
     def find_uris(self, hsh, **kw):
         #userId = identity.current.user_name  
         return self.srv.blobUris(hsh)
 
-    def local_path (self, src, **kw):
-        ''' return local path if it exists otherwise None'''
-        return self.srv.id2path(get_image_id(src))
-
-    def get_filename (self, src):
-        ''' returns filename'''
-        return self.srv.originalFileName(get_image_id(src))
+#    def local_path (self, src, **kw):
+#        ''' return local path if it exists otherwise None'''
+#        return self.srv.id2path(get_image_id(src))
         
-    def get_image_id (self, src):
-        return get_image_id(src)
-    
-    def set_file_info( self, image_uri, **kw ):
-        self.srv.setBlobInfo(image_uri, **kw)
+#    def set_file_info( self, image_uri, **kw ):
+#        self.srv.setBlobInfo(image_uri, **kw)
 
-    def set_file_credentials( self, image_uri, owner_name, permission ):
-        self.srv.setBlobCredentials(image_uri, owner_name, permission )
+#    def set_file_credentials( self, image_uri, owner_name, permission ):
+#        self.srv.setBlobCredentials(image_uri, owner_name, permission )
 
-    def set_file_acl( self, image_uri, owner_name, permission ):
-        self.srv.set_file_acl(image_uri, owner_name, permission )    
+#    def set_file_acl( self, image_uri, owner_name, permission ):
+#        self.srv.set_file_acl(image_uri, owner_name, permission )    
 
+    def guess_image_type (self, filename):
+        """guess whether the file is an image based on the filename
+        and whether we think we can decode
+        """
+        if self.format_map is None:
+            self.format_map = get_format_map()
+
+        ext = os.path.splitext(filename)[1]
+        return self.format_map.get(ext[1:].lower())
 
 
     @expose()
