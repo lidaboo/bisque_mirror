@@ -222,7 +222,7 @@ vertices = Table ('vertices', metadata,
 taggable_acl = Table('taggable_acl', metadata,
                      Column('taggable_id', Integer, ForeignKey('taggable.id'), primary_key=True),
                      Column('user_id', Integer, ForeignKey('taggable.id'),primary_key=True),
-                     Column('permission', Integer, key="action"),
+                     Column('permission', Integer),
                      )
 
 
@@ -319,24 +319,11 @@ class Taggable(object):
         self.ts = datetime.now()
         #log.debug("new taggable user:" + str(session.dough_user.__dict__) )
         owner  = identity.current.get_bq_user()
-        mex = session.get('mex', None)
-        log.debug ("owner = %s mex = %s" % (owner, mex))
+        self.mex = current_mex()
+        log.debug ("owner = %s mex = %s" % (owner, self.mex))
         if owner:
             self.owner_id = owner.id
             self.perm = PRIVATE
-        if mex:
-            self.mex = mex
-        else:
-            mexid = session.get('mex_id')
-            log.debug ("mex_id = %s" % mexid)
-            if mexid:
-                self.mex = DBSession.query(ModuleExecution).get(mexid)
-                #session['mex'] = self.mex
-            else:
-                # Default to the system/init mex
-                self.mex = DBSession.query(ModuleExecution).filter_by(
-                    resource_user_type = "initialization").first()
-                #session['mex'] = self.mex
 
         if owner is None:
             log.warn ("CREATING taggable %s with no owner" % str(self) )
@@ -739,12 +726,12 @@ class TaggableAcl(object):
     xmltag = "auth"
 
 
-    def setperm(self, perm):
-        self.action = { "read":0, "edit":1 } .get(perm, 0)
-    def getperm(self):
-        return [ "read", "edit"] [self.action]
+    def setaction(self, perm):
+        self.permission = { "read":0, "edit":1 } .get(perm, 0)
+    def getaction(self):
+        return [ "read", "edit"] [self.permission]
         
-    permission = property(getperm, setperm)
+    action = property(getaction, setaction)
     
     def __str__(self):
         return "resource:%s  user:%s permission:%s" % (self.taggable_id,
@@ -777,14 +764,7 @@ mapper( Value, values,
         )
 
 mapper( Vertex, vertices)
-mapper(TaggableAcl, taggable_acl,
-       properties = {
-#           'user'    : relation(User, 
-#                                passive_deletes="all",
-#                                uselist=False,
-#                                primaryjoin=(taggable_acl.c.user_id== taggable.c.id),
-#                                foreign_keys=[taggable.c.id])
-           })
+mapper(TaggableAcl, taggable_acl,)
 
 ############################
 # Taggable mappers
@@ -803,7 +783,7 @@ mapper( Taggable, taggable,
                                            taggable.c.resource_type == 'gobject')),
     'acl'  : relation(TaggableAcl, lazy=True, cascade="all, delete-orphan",
                       primaryjoin = (TaggableAcl.taggable_id == taggable.c.id),
-                      backref = backref('resource', remote_side=[taggable.c.id] ),
+                      backref = backref('resource', enable_typechecks=False, remote_side=[taggable.c.id] ),
                       ),
     'children' : relation(Taggable, lazy=True, cascade="all, delete-orphan",
                           enable_typechecks = False, 
@@ -851,7 +831,6 @@ mapper(BQUser,  inherits=Taggable,
         'tguser' : relation(User, uselist=False, 
             primaryjoin=(User.user_name == taggable.c.resource_name),
             foreign_keys=[User.user_name]),
-
 
         'owns' : relation(Taggable, lazy=True,
                           cascade = "all, delete-orphan",
@@ -991,6 +970,43 @@ def init_admin():
         
     log.debug ("admin user = %s" %  admin_user)
     return admin_user
+
+
+
+def current_mex ():
+    mex = None
+    try:
+        mex = session.get('mex', None)
+        if mex is None:
+            mex_id = session.get('mex_id', None)
+            if mex_id:
+                mex = DBSession.query(ModuleExecution).get(mexid)
+    except TypeError, e:
+        pass
+
+    if mex is None:
+        mex = DBSession.query(ModuleExecution).filter_by(
+            resource_user_type = "initialization").first()
+    return mex
+
+def set_current_mex(mex):
+    try:
+        session['mex'] = mex
+        return 
+    except TypeError,e:
+        pass
+            
+    from tg import session
+    from bq.core import model
+    from paste.registry import Registry
+    from beaker.session import Session, SessionObject
+
+    registry = Registry()
+    registry.prepare()
+    registry.register(session, SessionObject({}))
+
+    session['mex'] = mex
+
 
 
 
