@@ -56,13 +56,15 @@ import tempfile
 from tg import config
 from lxml import etree
 from StringIO import StringIO
+from subprocess import call, PIPE, Popen, STDOUT
 
 from bq.core import identity
 from bq.core.exceptions import EngineError
-from base_adapter import BaseAdapter
 from bq.util.paths import bisque_path
 
-from subprocess import call, PIPE, Popen, STDOUT
+from base_adapter import BaseAdapter
+from bq.engine.controllers.module_run import ModuleRunner
+
 
 MODULE_BASE = config.get('bisque.engine_service.local_modules', bisque_path('modules'))
 log = logging.getLogger('bq.engine_service.adapters.runtime')
@@ -75,12 +77,12 @@ class RuntimeAdapter(BaseAdapter):
     def __init__(self):
         pass
     def check(self, module):
-        module_name = module.get('name')
-        module_path = module.get('path').split(' ')[-1]
-        command = os.path.join(MODULE_BASE, module_name, module_path)
-        if not os.path.exists (command):
-            log.debug ("Failed to find module at %s" % command)
-            return False
+        #module_name = module.get('name')
+        #module_path = module.get('path').split(' ')[-1]
+        #command = os.path.join(MODULE_BASE, module_name, module_path)
+        #if not os.path.exists (command):
+        #    log.debug ("Failed to find module at %s" % command)
+        #    return False
         
         async =  module.xpath('//tag[@name="asynchronous"]')
         if len(async):
@@ -126,22 +128,30 @@ class RuntimeAdapter(BaseAdapter):
         module_dir = os.path.join(MODULE_BASE, module_name)
             
         #command = os.path.join(module_dir, module_path)
-        command_line = module_path.split(' ')
+        #command_line = module_path.split(' ')
+        command_line = []
         command_line.append('-d')
         command_line.extend (params)
         
+        current_dir = os.getcwd()
         try:
             log.debug ("Exec in %s" % os.getcwd())
             log.debug ("Exec of '%s' in %s " % (' '.join(command_line), module_dir))
-            process = Popen(command_line, cwd=module_dir, stdout=PIPE, stderr=PIPE)
-            stdout,stderr = process.communicate()
-            log.debug ("Process ID: %s " %(process.pid))
-            if process.returncode != 0:
-                raise EngineError("Non-zero exit code", 
-                                  stdout = stdout,
-                                  stderr = stderr)
-            return process.pid
+
+            os.chdir(module_dir)
+            m = ModuleRunner()
+            m.main(arguments=command_line)
+            os.chdir(current_dir)
+            #process = Popen(command_line, cwd=module_dir, stdout=PIPE, stderr=PIPE)
+            #stdout,stderr = process.communicate()
+            #log.debug ("Process ID: %s " %(process.pid))
+            #if process.returncode != 0:
+            #    raise EngineError("Non-zero exit code", 
+            #                      stdout = stdout,
+            #                      stderr = stderr)
+            #return process.pid
         except Exception, e:
+            os.chdir(current_dir)
             log.exception ("During exec of %s: %s" % (command_line, e))
             mex.set ('value', 'FAILED')
             etree.SubElement(mex, 'tag',
@@ -151,8 +161,8 @@ class RuntimeAdapter(BaseAdapter):
                 raise
             else:
                 raise EngineError('Exception in module: %s' % command_line, 
-                                  stdout = stdout,
-                                  stderr = stderr,
+                                  #stdout = stdout,
+                                  #stderr = stderr,
                                   exc = e)
         
         
