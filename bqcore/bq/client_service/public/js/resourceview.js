@@ -166,24 +166,11 @@ ResourceDispatch.prototype.dispatch_dataset = function(resource) {
     BQApp.resource = resource;
     resource.resource = resource;
     BQApp.main.getComponent('centerEl').setLoading(false);
-    var resourcesBrowser = new Bisque.ResourceBrowser.Browser({
-        dataset: resource.getMembers().uri+'/value',
-        height: '100%',   
-        selType: 'SINGLE',
-        //viewMode : 'ViewerOnly',
-        listeners : { 'Select': function(me, resource) { 
-                      window.open(bq.url('/client_service/view?resource='+resource.uri)); 
-                    }, 
-                   scope: this },
-    });  
-
-    BQApp.main.getComponent('centerEl').add({
-        xtype : 'container',
-        layout : 'fit',
-        items : [resourcesBrowser]
-    });
-
     
+    var renderer = Ext.create('BQ.renderers.dataset', {
+        resource: resource,
+    });  
+    BQApp.setCenterComponent(renderer);
 };
 
 
