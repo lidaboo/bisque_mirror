@@ -167,6 +167,7 @@ Ext.define('Bisque.ResourceTagger',
             rowLines : true,
             lines : true,
             iconCls : 'icon-grid',
+            animate: this.animate,
             //title : 'Resource tagger - '+'<span style="font-weight:normal">'+this.resource.uri.replace(window.location.origin,"")+'</span>',
 
             store : this.getTagStore(data),
@@ -312,8 +313,14 @@ Ext.define('Bisque.ResourceTagger',
             {
                 name : 'name',
                 type : 'string',
-                convert : function(value, record)
-                {
+                convert : function(value, record) {
+                    // dima: show type and name for gobjects
+                    if (record.raw instanceof BQGObject) {
+                        var txt = [];
+                        if (record.raw.type && record.raw.type != 'gobject') txt.push(record.raw.type);
+                        if (record.raw.name) txt.push(record.raw.name); 
+                        if (txt.length>0) return txt.join(': ');
+                    }
                     return value || record.data.type;
                 }
             },
@@ -340,8 +347,14 @@ Ext.define('Bisque.ResourceTagger',
             {
                 name : 'qtip',
                 type : 'string',
-                convert : function(value, record)
-                {
+                convert : function(value, record) {
+                    // dima: show type and name for gobjects                    
+                    if (record.raw instanceof BQGObject) {
+                        var txt = [];
+                        if (record.raw.type && record.raw.type != 'gobject') txt.push(record.raw.type);
+                        if (record.raw.name) txt.push(record.raw.name);                        
+                        if (txt.length>0) return txt.join(': ');
+                    }    
                     return record.data.name + ' : ' + record.data.value;
                 }
 
@@ -727,6 +740,7 @@ Ext.define('Bisque.ResourceTagger',
 Ext.define('Bisque.GObjectTagger',
 {
     extend : 'Bisque.ResourceTagger',
+    animate: false,
 
     constructor : function(config)
     {
@@ -824,11 +838,24 @@ Ext.define('Bisque.GObjectTagger',
         this.checkTree(rootNode, button.checked);
     },
     
-    appendFromMex : function(resQ)
-    {
+    appendFromMex : function(resQo) {
+        // dima: deep copy the resq array, otherwise messes up with analysis
+        var resQ = [];
+        for (var i=0; i<resQo.length; i++)
+            resQ[i] = resQo[i];
+        
         // Only look for gobjects in tags which have value = image_url 
         for (var i=0;i<resQ.length;i++)
         {
+            // the mex may have sub mexs
+            if (resQ[i].resource.children && resQ[i].resource.children.length>0) {
+                for (var k=0; k<resQ[i].resource.children.length; k++)
+                    if (resQ[i].resource instanceof BQMex)
+                        var rr = Ext.create('Bisque.Resource.Mex', { resource : resQ[i].resource.children[k], });
+                        resQ.push(rr);
+                continue;
+            }
+                
             var outputsTag = resQ[i].resource.find_tags('outputs');
             
             if (outputsTag)
@@ -840,20 +867,20 @@ Ext.define('Bisque.GObjectTagger',
     
     findGObjects : function(resource, imageURI)
     {
-        if (resource.value == imageURI)
+        if (resource.value && resource.value == imageURI)
             return resource.gobjects;
             
         var gobjects = null;
-        
-        for (var i=0; i<=resource.tags.length, !gobjects; i++)
-            gobjects = this.findGObjects(resource.tags[i], imageURI); 
+        var t = null;
+        for (var i=0; (t=resource.tags[i]) && !gobjects; i++)
+            gobjects = this.findGObjects(t, imageURI); 
 
         return gobjects;
     },
     
     appendGObjects : function(data, mex)
     {
-        if (data.length>0)
+        if (data && data.length>0)
         {
             this.addNode(this.tree.getRootNode(), {name:data[0].name, value:Ext.Date.format(Ext.Date.parse(mex.ts, 'Y-m-d H:i:s.u'), "F j, Y g:i:s a"), gobjects:data});
             this.fireEvent('onappend', this, data);

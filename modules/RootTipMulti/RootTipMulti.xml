@@ -15,8 +15,10 @@
           <gobject name="tips">
             <tag name="template" type="template">
               <tag name="gobject" value="point" />
-              <tag name="amount" value="many" />
-              <tag name="fail_message" value="Requires select of root tips" />
+              <tag name="require_gobjects">              
+                  <tag name="amount" value="many" />
+                  <tag name="fail_message" value="Requires select of root tips" />
+              </tag>              
             </tag>
           </gobject>
         </tag>
@@ -29,7 +31,17 @@
         <tag name="template" type="template">
           <tag name="label" value="Tracked root tips" />
         </tag>            
-        <gobject name="root_tips" />
+        <gobject name="root_tips">
+            <tag name="template" type="template">
+                <tag name="plot"          value="true"  type="boolean" />
+                <tag name="export_csv"    value="true"  type="boolean" />
+                <tag name="export_xml"    value="true"  type="boolean" />
+                <tag name="export_excel"  value="false" type="boolean" />
+                <tag name="export_gdocs"  value="false" type="boolean" />
+                <tag name="preview_movie" value="false" type="boolean" />
+            </tag>                  
+        </gobject>        
+        
       </tag>
     </tag>    
     
@@ -45,7 +57,10 @@
         <tag name="group" value="application" />
     </tag>
     
-<!--    <tag name="interface" type="file" value="public/index.html" /> -->
+    <tag name="interface">        
+        <tag name="javascript" type="file" value="my_renderes.js" />
+        <tag name="css" type="file" value="webapp.css" />
+    </tag>
     <tag name="title"  value="MultiRoot growth analyzer" />    
     <tag name="help"      type="file" value="public/help.html" />
     <tag name="thumbnail" type="file" value="public/thumbnail.png" />   
