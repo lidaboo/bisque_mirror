@@ -1,0 +1,22 @@
+#
+# Bisque -engine  config
+server {
+    listen       11000;
+    root <YOUR_BISQUE_DIR>/public;
+
+    charset utf-8;
+
+    location / {
+        uwsgi_pass 0.0.0.0:3052;
+        include uwsgi_params;
+        uwsgi_param SCRIPT_NAME "";
+        uwsgi_read_timeout 600;
+        uwsgi_send_timeout 600;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   html;
+    }
+}
+
