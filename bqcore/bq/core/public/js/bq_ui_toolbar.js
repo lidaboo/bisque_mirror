@@ -156,9 +156,49 @@ Ext.define('BQ.Application.Toolbar', {
         this.menu_user.add( {text: 'Sign out', itemId: 'menu_user_signout', hidden: true, 
                                 handler: Ext.Function.pass(pageAction, bq.url('/auth_service/logout_handler'))} );
                                  
-        this.menu_user.add( {text: 'Sign in', itemId: 'menu_user_signin', 
-                                handler: Ext.Function.pass(pageAction, bq.url('/auth_service/login?came_from='+encodeURIComponent(window.location)))} );
-                         
+        //this.menu_user.add( {text: 'Sign in', itemId: 'menu_user_signin', 
+        //                        handler: Ext.Function.pass(pageAction, bq.url('/auth_service/login?came_from='+encodeURIComponent(window.location)))} );
+        this.menu_user.add({text: 'Sign in', itemId: 'menu_user_signin', 
+                            menu: {
+                                xtype: 'menu',
+                                plain: true,
+                                items: {                                
+                                    xtype: 'form',
+                                    layout: 'form',
+                                    cls: 'loginform',
+                                    border: false,
+                                    bodyBorder: false,            
+                                    url: '/auth_service/login',
+                                    width: 350,
+                                    fieldDefaults: {
+                                        msgTarget: 'side',
+                                        border: 0,
+                                    },
+                                    items: [{
+                                            xtype: 'hiddenfield',
+                                            name: 'came_from',
+                                            value: document.location,
+                                        }, {
+                                            xtype: 'textfield',
+                                            fieldLabel: 'User name',
+                                            name: 'login',
+                                            allowBlank: false,                
+                                    },],
+                            
+                                    buttons: [{
+                                        xtype: 'button',
+                                        text: 'Sign in',
+                                        formBind: true, //only enabled once the form is valid
+                                        disabled: true,
+                                        handler: function() {
+                                            var form = this.up('form').getForm();
+                                            if (form.isValid())
+                                                form.submit();
+                                        }
+                                    }]
+                                }, // form
+                            }, // button menu 
+        }); // add login menu
     
         
         var menu_help = [];
@@ -259,8 +299,7 @@ Ext.define('BQ.Application.Toolbar', {
         this.items.push({ menu: menu_help, icon: this.images_base_url+'help.png', tooltip: 'All information about Bisque'  }); 
         
         this.callParent();
-        
-        
+
         // update user menu based on application events
         Ext.util.Observable.observe(BQ.Application);        
         BQ.Application.on('gotuser', function(u) { 
@@ -298,6 +337,12 @@ Ext.define('BQ.Application.Toolbar', {
             for (var i=0; (p=this.tools_admin[i]); i++)
                 this.menu_user.child('#'+p).setVisible(false);              
         }, this);  
+
+        BQ.Preferences.get({
+            type : 'system',
+            key : 'Toolbar',
+            callback : Ext.bind(this.on_preferences, this)
+        });
         
         this.fetchResourceTypes();        
     },
@@ -313,6 +358,11 @@ Ext.define('BQ.Application.Toolbar', {
 
     systemPrefs : function() {
         var preferences = Ext.create('BQ.Preferences.Dialog', {prefType:'system'});
+    },
+    on_preferences : function (preferences) {
+        clog('boo');
+        this.menu_user.child('#menu_user_register').setVisible(false);            
+        //'
     },
 
     fetchResourceTypes : function() {
