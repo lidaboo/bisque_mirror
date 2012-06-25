@@ -78,6 +78,14 @@ max_response_time = float(config.get ('bisque.data_service.max_response_time', 0
 class BQParseException(BQException):
     pass
 
+def unicode_safe(u):
+    try:
+        return unicode(u, "utf-8")
+    except TypeError:
+        return unicode(u)
+
+
+
 #: Gobject type that may be used as top level tags
 known_gobjects = [
     'gobject',
@@ -111,91 +119,6 @@ class XMLNode(list):
                                                  self.gobjects,
                                                  self.kids);
 
-class NodeConverter (object):
-    """Base class for providing XML convertion"""
-    def element(self, dbo, parent, baseuri, **kw):
-        xtag = kw.pop('xtag', dbo.__class__.xmltag)
-        if not kw:
-            kw = model_fields (dbo, baseuri)
-        if parent is not None:
-            #log.debug ("etree: " + str(xtag)+ str(kw))
-            return etree.SubElement (parent, xtag, **kw)
-        else:
-            return etree.Element (xtag,  **kw)
-        
-    def toxmlnode (self, dbo, parent, baseuri, view=None):
-        if dbo.xmltag == 'resource':
-            name, dbtype = dbtype_from_name (dbo.type)
-            if dbtype != Taggable:
-                newdbo = DBSession.query(dbtype).get(dbo.id)
-                return toxmlnode(newdbo, parent, baseuri, view)
-        return self.element (dbo, parent, baseuri)
-
-            
-
-class TaggableConverter (NodeConverter):
-    "generic Converter"
-#    def toxmlnode (self, v, parent , baseuri , view=None):
-#        #log.debug ("Taggable converting %s" % self.type)
-#        return self.element (v, parent, baseuri)
-    
-class GObjectConverter (NodeConverter):
-    def toxmlnode (self, dbo, parent, baseuri, view):
-        if 'canonical' not in view and dbo.tag_type in known_gobjects:
-            node = self.element (dbo, parent, baseuri, xtag=dbo.tag_type)
-        else:
-            node = self.element (dbo, parent, baseuri)
-        [ etree.SubElement(node, 'vertex', **model_fields(dbv, baseuri)) for dbv in dbo.vertices ] 
-        return node
-
-class VertexConverter (NodeConverter):
-    def toxmlnode (self, v, parent , baseuri , view=None):
-        #log.debug ("Vertex converting %s" % self.type)
-        return self.element (v, parent, baseuri)
-
-
-class TagConverter (NodeConverter):
-    def toxmlnode (self, v, parent , baseuri, view ):
-        node= self.element (v, parent, baseuri)
-        [ toxmlnode (x, parent = node, baseuri=baseuri, view=view) for x in v.values ]
-        if len(node) == 1 and node[0].tag == 'value':
-            node.set ('value', node[0].text)
-            node.remove (node[0])
-#        elif len(node) == 0:
-#            node.set ('value', '')
-        return node
-    
-class ValueConverter (NodeConverter):
-    def toxmlnode (self, v, parent, baseuri, view):
-        n =  self.element  (v, parent, baseuri)
-        n.set('type', v.type)
-        if v.type == 'object':
-            n.text = baseuri + unicode(v.value)
-        else:
-            n.text = unicode(v.value)
-        #log.debug ('valueconverter : %s' % etree.tostring(n))
-        return n
-
-
-def toxmlnode(dbo, parent, baseuri, view):
-    try:
-        #log.debug ("converter for %s " % type(dbo))
-        converter =  dbo.converter
-        return converter.toxmlnode (dbo, parent, baseuri, view)
-    except AttributeError:
-        #log.debug ("NodeConverter for %s " % type(dbo))
-        return NodeConverter().toxmlnode (dbo, parent, baseuri, view)
-
-Taggable.toxmlnode = toxmlnode
-Taggable.converter = TaggableConverter()
-
-Tag.converter = TagConverter()
-GObject.converter = GObjectConverter()
-
-Value.converter = ValueConverter()
-Value.toxmlnode = toxmlnode
-Vertex.converter = VertexConverter()
-Vertex.toxmlnode = toxmlnode
 
 ##################################################
 # Resource
@@ -449,20 +372,13 @@ def xmlnode(dbo, parent, baseuri, view, **kw):
         elem = xmlelement (dbo, parent, baseuri, view=view)
         elem.set('type', dbo.type)
         if dbo.type == 'object':
-            elem.text = baseuri + unicode(dbo.value)
+            elem.text = baseuri + unicode_safe(dbo.value)
         else:
-            elem.text = unicode(dbo.value)
+            elem.text = unicode_safe(dbo.value)
         return elem
 
     elem = xmlelement (dbo, parent, baseuri, view=view)
     return elem
-
-def valnode(val, parent, baseuri, view):
-    if parent.resource_type in gobjects:
-        # create vertex node from val
-        pass
-    else:
-        toxmlnode(val,  parent = parent, baseuri=baseuri, view=view)
 
 
 def resource2nodes(dbo, parent=None, view=[], baseuri=None,  **kw):
@@ -496,11 +412,6 @@ def resource2nodes(dbo, parent=None, view=[], baseuri=None,  **kw):
         if v.resource_parent_id in nodes:
             xmlnode (v, parent = nodes[v.resource_parent_id], baseuri=baseuri, view=view)
 
-    
-    #vals = DBSession.query(Values).filter(Value.value_document_id == doc_id)
-    #for val in vals:
-    #    parent = nodes[val.parent_id]
-    #    elem = valnode (val, parent, baseuri, view)
     log.debug('resource2nodes :read %d nodes ' % (len(nodes.keys())))
     return nodes, doc_id 
 
@@ -564,32 +475,9 @@ def db2tree_int(dbo, parent = None, view=None, baseuri=None, endtime=None):
     return True, n
 
 
-def db2node_SLOW(dbo, parent, view, baseuri, nodes, doc_id):
-    log.debug ("dbo=%s view=%s" % ( unicode(dbo), view))
-
-    if view is None or len(view)==0 or 'short' in view:
-        n = xmlnode(dbo, parent, baseuri, view)
-        return n, nodes, doc_id
-
-    n, nodes, doc_id = resource2tree(dbo, parent, view, baseuri, nodes, doc_id)
-    if 'deep' in view:
-        return n, nodes, doc_id
-
-    if "full" in view:
-        for kid in list(n):
-            if len(kid):
-                for subkid in list(kid):
-                    kid.remove(subkid)
-        return n, nodes, doc_id
-                    
-    v = filter(lambda x: x not in ('full','deep','short', 'canonical'), view)
-    for kid in list(n):
-        if kid.get('name') not in v:
-            n.remove(kid)
-    return n, nodes, doc_id
 
 def db2node(dbo, parent, view, baseuri, nodes, doc_id):
-    log.debug ("dbo=%s view=%s" % ( unicode(dbo), view))
+    log.debug ("dbo=%s view=%s" % ( dbo, view))
     if 'deep' in view:
         n, nodes, doc_id = resource2tree(dbo, parent, view, baseuri, nodes, doc_id)
         return n, nodes, doc_id
@@ -701,7 +589,7 @@ converters = {
     'integer' : int,
     'float'   : float,
     'number'  : float,
-    'string'  : lambda x: unicode(x, "utf-8"),
+    'string'  : unicode_safe,
     }
 
 def updateDB(root=None, parent=None, resource = None, factory = ResourceFactory, replace=False):
@@ -767,14 +655,14 @@ def updateDB(root=None, parent=None, resource = None, factory = ResourceFactory,
                 for k,v in attrib.items():
                     #log.debug ("%s attr %s:%s" % (resource, k, v))
                     if getattr(resource, k, v) != v:
-                        setattr(resource, k, unicode(v,"utf-8"))
+                        setattr(resource, k, unicode_safe(v))
                     
                 # Check for text
                 value = attrib.pop ('value', None)
                 if value is None and obj.tag == 'value':
                     value = obj.text
                 if value is not None and value != resource.value:
-                    convert = converters.get(type_, unicode)
+                    convert = converters.get(type_, unicode_safe)
                     resource.value = convert (value.strip())
                     #log.debug (u"assigned %s = %s" % (obj.tag , unicode(value,"utf-8")))
                 stack.append (resource)
