@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='bqengine',
-    version='0.0',
+    version='0.5.1',
     description='',
     author='',
     author_email='',
@@ -28,6 +28,10 @@ setup(
             ('public/**', 'ignore', None)]},
 
     entry_points="""
+    [paste.paster_command]
+    load_engine = bq.engine.commands.load_engine:LoadEngine
+    [paste.paster_global_command]
+    load_glo_engine = bq.engine.commands.load_engine:LoadEngine
     [bisque.services]
     engine_service = bq.engine.controllers.engine_service
     [bq.commands]
