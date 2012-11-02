@@ -1,0 +1,35 @@
+<module name="CellProfiler" type="runtime">
+
+    <tag name="inputs">
+        <tag type="image" name="image_url"  />
+        <tag type="input-system" name="mex_url" />
+        <tag type="input-system" name="bisque_token" />
+        <tag name="pipeline"/>
+    </tag>
+
+    <tag name="outputs">
+        <tag name="CellProfiler Summary"/>
+        <tag type="image" name="output_image">
+            <tag type="gobject" name="cellprofiler"/>
+        </tag>
+    </tag>
+    
+    <tag name="execute_options">
+        <tag name="argument_style" value="named" />
+    </tag>
+    
+    <tag name="module_options" >
+        <tag name="version" value="1" />
+    </tag>    
+    
+    <tag name="display_options" >
+        <tag name="group" value="application" />
+    </tag>
+   
+    <tag name="interface" type="file" value="public/html/CellProfiler.html" />
+    <tag name="thumbnail" type="file" value="public/images/thumbnail.png" />
+    <tag name="title" value="CellProfiler"/>
+    <tag name="authors" value="The Bisque team"/>       
+    <tag name="description" value="CellProfiler enables biologists to quantitatively measure phenotypes from thousands of images automatically." />  
+
+</module>
