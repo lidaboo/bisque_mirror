@@ -13,7 +13,6 @@
 
 Ext.define('BQ.renderers.dataset', {
     alias: 'widget.renderersdataset',    
-    //extend: 'Ext.panel.Panel',
     extend: 'Bisque.Resource.Page',
     requires: ['Ext.toolbar.Toolbar', 'Ext.tip.QuickTipManager', 'Ext.tip.QuickTip', 'BQ.dataset.Panel'],
 
@@ -25,7 +24,7 @@ Ext.define('BQ.renderers.dataset', {
     defaults: { border: 0, },
  
     onResourceRender : function() {
-        this.setLoading('Fetching memebrs...', true);
+        this.setLoading('Fetching members...', true);
         this.tagger = Ext.create('Bisque.ResourceTagger', {
             resource : this.resource,
             title : 'Annotations',
@@ -41,13 +40,15 @@ Ext.define('BQ.renderers.dataset', {
                          scope: this },               
         });
         
-        this.mexs = Ext.create('Bisque.ResourceBrowser.Browser', {
-            'layout' : 5,
-            'title' : 'Analysis',
-            'viewMode' : 'MexBrowser',
-            'dataset' : '/data_service/mex',
-            'tagQuery' : '"'+this.resource.uri+'"',
-            'wpublic' : true,
+        //var mexs = Ext.create('Bisque.ResourceBrowser.Browser', {
+        var mexs = {
+            xtype: 'bq-resource-browser',
+            layout : 5,
+            title : 'Analysis',
+            viewMode : 'MexBrowser',
+            dataset : '/data_service/mex',
+            tagQuery : '"'+this.resource.uri+'"',
+            wpublic : true,
             mexLoaded : false,
             listeners : {
                 'browserLoad' : function(me, resQ) {
@@ -58,9 +59,20 @@ Ext.define('BQ.renderers.dataset', {
                 },
                 scope:this
             },
-        });         
+        };  
+        
+        var map = undefined;
+        if (this.loadmap) map = {        
+            xtype: 'bqmap',
+            title: 'Map',
+            zoomLevel: 16,
+            gmapType: 'map',
+            autoShow: true,
+            resource: this.resource,
+        };               
     
-        this.tabber = Ext.create('Ext.tab.Panel', {
+        var tabber = {
+            xtype: 'tabpanel',
             region : 'east',
             activeTab : 0,
             border : false,
@@ -72,10 +84,11 @@ Ext.define('BQ.renderers.dataset', {
             title : 'Annotate and modify',
             //collapsed: true,
 
-            items : [this.tagger, this.mexs, this.operations]
-        });
+            items : [this.tagger, mexs, this.operations, map]
+        };
 
         this.preview = Ext.create('Bisque.ResourceBrowser.Browser', {
+            xtype: 'bq-resource-browser',            
             region:'center', 
             flex: 3,
             dataset: this.resource?this.resource:'None',
@@ -141,7 +154,7 @@ Ext.define('BQ.renderers.dataset', {
         ]);
 
 
-        this.add( [this.preview, this.tabber] );        
+        this.add( [this.preview, tabber] );        
         this.setLoading(false);
 
         this.fetchResourceTypes();
@@ -160,7 +173,7 @@ Ext.define('BQ.renderers.dataset', {
         tb.child('#menu_add_images').setDisabled(true); 
         //tb.child('#menu_query').setDisabled(true); 
         tb.child('#menu_delete_selected').setDisabled(true);
-        tb.child('#menu_delete').setDisabled(true);
+        //tb.child('#menu_delete').setDisabled(true);
         this.operations.setDisabled(true);               
     },
  
@@ -264,8 +277,7 @@ Ext.define('BQ.renderers.dataset', {
             sel = [sel];
         }
 
-        var m = this.resource.getMembers();
-        var members = m.values; // has to be in two lines, otherwise some optimization happens...
+        var members = this.resource.values || [];
         var r = null;
         for (var i=0; (r=sel[i]); i++)
             members.push(new BQValue('object', r.uri ));

@@ -376,11 +376,20 @@ Ext.define('BQ.selectors.Resource', {
         if (this.selected_resource instanceof BQImage) {
             this.onImage(this.selected_resource);
         } else if (this.selected_resource instanceof BQDataset) {
-            BQFactory.request({ 
-                uri: this.selected_resource.getMembers().values[0].value, 
-                cb: callback(this, 'onImage'), 
-                errorcb: callback(this, 'onerror'), 
-            });  
+            var me = this;
+            this.selected_resource.getMembers(function (dataset) {
+                // Sometime values are loaded instances (image) and sometimes not!
+                var uri = dataset.values[0].uri || dataset.values[0].value;
+                BQFactory.request ({ uri : uri,
+                                     cb: callback(me, 'onImage'), 
+                                     errorcb: callback(me, 'onerror'), 
+                                   }); });
+
+            // BQFactory.request({ 
+            //     uri: this.selected_resource.getMembers().values[0].value, 
+            //     cb: callback(this, 'onImage'), 
+            //     errorcb: callback(this, 'onerror'), 
+            // });  
         }
         
         this.add(this.resourcePreview);
@@ -1458,12 +1467,14 @@ Ext.define('BQ.selectors.Combo', {
     },
 
     select: function(resource) {
+        this.resource.value = resource.value;
         this.child('#combobox').setValue( resource.value );
     }, 
 
     isValid: function() {
-        if (!this.resource.value) {
-            var template = resource.template || {};
+        var template = this.resource.template || {};
+
+        if (Ext.isEmpty(this.resource.value) || this.resource.value==template.fail_value) {
             var msg = template.fail_message || 'You need to select an option!';
             //BQ.ui.attention(msg);
             BQ.ui.tip(this.getId(), msg, {anchor:'left',});

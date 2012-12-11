@@ -86,7 +86,6 @@ import threading
 import shutil
 import tarfile
 import zipfile
-import os.path
 import urllib
 import copy
 import mimetypes
@@ -112,10 +111,34 @@ from bq.util.paths import data_path
 from bq import image_service
 from bq import data_service
 from bq import blob_service
+
 import bq.image_service.controllers.imgcnv as imgcnv
 import bq.image_service.controllers.bioformats as bioformats
 from bq.util.mkdir import _mkdir
 
+log = logging.getLogger("bq.import_service")
+
+
+UPLOAD_DIR = config.get('bisque.import_service.upload_dir', data_path('uploads'))
+#---------------------------------------------------------------------------------------
+# Direct transfer handling (reducing filecopies ) 
+# Patch to allow no copy file uploads (direct to destination directory)
+#---------------------------------------------------------------------------------------
+import cgi
+#if upload handler has been inited in webob
+if hasattr(cgi, 'file_upload_handler'):
+    tmp_upload_dir = UPLOAD_DIR 
+    #config.get('bisque.blob_service.tmp_upload_dir', os.path.join(data_path(),'tmp_upload_dir'))
+    _mkdir(tmp_upload_dir)
+    log.warn ('Configure special upload handler in %s' % tmp_upload_dir)
+    
+    #register callables here
+    def import_transfer_handler(filename):
+        import tempfile
+        return tempfile.NamedTemporaryFile('w+b', suffix = os.path.basename(filename), dir=tmp_upload_dir, delete = False)
+    
+    #map callables to paths here
+    cgi.file_upload_handler['/import/transfer'] = import_transfer_handler
 
 #---------------------------------------------------------------------------------------
 # inits 
@@ -124,32 +147,76 @@ from bq.util.mkdir import _mkdir
 imgcnv_needed_version = '1.43'
 bioformats_needed_version = '4.3.0'
 
+
+
+
+#---------------------------------------------------------------------------------------
+# Misc functions
+#---------------------------------------------------------------------------------------
+
+
+def sanitize_filename(filename):
+    """ Removes any path info that might be inside filename, and returns results. """
+    return urllib.unquote(filename).split("\\")[-1].split("/")[-1]
+
+
+def merge_resources (*resources):
+    """merge attributes and subtags of parameters
+    
+    later resource overwrite earlier ones
+    """
+    final = copy.deepcopy (resources[0])
+    for rsc in resources[1:]:
+        final.attrib.update(rsc.attrib)
+        final.extend (copy.deepcopy (list (rsc)))
+    return final
+
 #---------------------------------------------------------------------------------------
 # File object 
 #---------------------------------------------------------------------------------------
 
-class UploadedFile:
-    """ Object encapsulating upload file """
-    filename   = None
-    file       = None
-    tags       = None
-    original   = None
-    permission = 'private'
-    
-    def __init__(self, path, name, tags=None):
-        self.filename = name
-        self.file = open(path, 'rb')
-        self.tags = tags
+class UploadedResource(object):
+    """ Object encapsulating upload resource+file """
+    filename = None
+    fileobj  = None
+    path     = None
+
+    def __init__(self, resource, fileobj=None ):
+        self.resource = resource
+        self.fileobj = fileobj
+        
+        path = resource.get('value')
+        if path and path.startswith('file://'):
+            self.path = path.replace('file://', '')
+        if resource.get ('name'):
+            self.filename = sanitize_filename(resource.get('name'))
+        elif fileobj:
+            # POSTed fileobject will have a filename (which may be path)
+            # http://docs.pylonsproject.org/projects/pyramid_cookbook/en/latest/forms/file_uploads.html
+            self.path = getattr(fileobj, 'name', '')
+            self.filename = sanitize_filename (self.path)
+            resource.set('name', self.filename)
+
+    def localpath(self):
+        'retrieve a local path for this uploaded resource'
+
+    def close(self):
+        'close fileobj'
+        if self.fileobj:
+            self.fileobj.close()
         
     def __del__ (self):
-        if not self.file is None:
-            self.file.close()
+        self.close()
+
+    def __repr__(self):
+        return 'UploadFile([%s] [%s] [%s] [%s]'%(self.path, self.filename, self.resource, self.fileobj)
+
+
 
 #---------------------------------------------------------------------------------------
 # controller 
 #---------------------------------------------------------------------------------------
 
-log = logging.getLogger("bq.import_service")
 class import_serviceController(ServiceController):
     #Uncomment this line if your controller requires an authenticated user
     #allow_only = predicates.not_anonymous()
@@ -162,6 +229,7 @@ class import_serviceController(ServiceController):
         mimetypes.add_type('image/volocity', '.mvd2')
         
         self.filters = {}
+        self.filters['zip-bisque']      = self.filter_zip_bisque
         self.filters['zip-multi-file']  = self.filter_zip_multifile   
         self.filters['zip-time-series'] = self.filter_zip_tstack   
         self.filters['zip-z-stack']     = self.filter_zip_zstack   
@@ -181,9 +249,6 @@ class import_serviceController(ServiceController):
 # misc functions
 #------------------------------------------------------------------------------
 
-    def sanitize_filename(self, filename):
-        """ Removes any path info that might be inside filename, and returns results. """
-        return urllib.unquote(filename).split("\\")[-1].split("/")[-1]
 
     def check_imgcnv (self):
         if not imgcnv.installed():
@@ -265,8 +330,8 @@ class import_serviceController(ServiceController):
         z.close()
         return names
 
-    def unPack(self, filename, folderName, peserve_structure=False):
-        if peserve_structure is False:
+    def unPack(self, filename, folderName, preserve_structure=False):
+        if preserve_structure is False:
             if filename.lower().endswith('zip'):
                 return self.unZipFlat(filename, folderName)
             else:
@@ -277,12 +342,31 @@ class import_serviceController(ServiceController):
             else:
                 return self.unTar(filename, folderName)
 
-    def unpackPackagedFile(self, upload_file, peserve_structure=False):
+    def localcopy (self, upload_file, suggested):
+        'force a local copy to be created for the uploadfile'
+        if upload_file.path:
+            return upload_file.path
+        if upload_file.fileobj:
+            path = os.path.abspath(upload_file.fileobj.name)
+            if os.path.isfile (path):
+                upload_file.path = path
+                return path
+            with open(suggested,'wb') as trg:
+                shutil.copyfileobj(upload_file.fileobj, trg)
+                return suggested
+        if upload_file.resource.get('value'):
+            path = blob_service.fetch_blob (upload_file.resource.get('value'))
+            upload_file.path = path
+            return path
+        return None
+            
+
+    def unpackPackagedFile(self, upload_file, preserve_structure=False):
         ''' This method unpacked uploaded file into a proper location '''
         
-        uploadroot = config.get('bisque.image_service.upload_dir', data_path('uploads'))
+        uploadroot = UPLOAD_DIR #config.get('bisque.image_service.upload_dir', data_path('uploads'))
         upload_dir = '%s/%s'%(uploadroot, str(bq.core.identity.get_user().name)) # .user_name
-        filename   = self.sanitize_filename(upload_file.filename)
+        filename   = sanitize_filename(upload_file.filename)
         filepath   = '%s/%s.%s'%(upload_dir, strftime('%Y%m%d%H%M%S'), filename)
         unpack_dir = '%s/%s.%s.UNPACKED'%( upload_dir, strftime('%Y%m%d%H%M%S'), filename )
         _mkdir (unpack_dir)
@@ -292,13 +376,14 @@ class import_serviceController(ServiceController):
 #        log.debug('unpackPackagedFile ::::: filepath\n %s'% filepath )
 #        log.debug('unpackPackagedFile ::::: unpack_dir\n %s'% unpack_dir )
         
-        # we'll store the original uploaded file
-        out = open (filepath,'wb')
-        shutil.copyfileobj (upload_file.file, out)
-        out.close()
-
+        #filepath = self.localcopy(upload_file, filepath)
+        filepath = blob_service.localpath (upload_file.resource.get('resource_uniq'))
         # unpack the contents of the packaged file
-        members = self.unPack(filepath, unpack_dir, peserve_structure)
+        try:
+            members = self.unPack(filepath, unpack_dir, preserve_structure)
+        except:
+            log.exception('Problem unpacking %s in %s' % (filepath, unpack_dir))
+            raise
  
         return unpack_dir, members
 
@@ -310,9 +395,9 @@ class import_serviceController(ServiceController):
         self.check_imgcnv()
         unpack_dir, members = self.unpackPackagedFile(upload_file)
 
-        uploadroot = config.get('bisque.image_service.upload_dir', data_path('uploads'))
+        uploadroot = UPLOAD_DIR #config.get('bisque.image_service.upload_dir', data_path('uploads'))
         upload_dir = '%s/%s'%(uploadroot, str(bq.core.identity.get_user().name)) # .user_name
-        filename   = self.sanitize_filename(upload_file.filename)
+        filename   = sanitize_filename(upload_file.filename)
         combined_filename = '%s.%s.ome.tif'%(strftime('%Y%m%d%H%M%S'), filename)
         combined_filepath = '%s/%s'%(upload_dir, combined_filename)
 
@@ -366,17 +451,14 @@ class import_serviceController(ServiceController):
         ''' This method unpacked uploaded file into a proper location '''
         self.check_bioformats()
         
-        uploadroot = config.get('bisque.image_service.upload_dir', data_path('uploads'))
+        uploadroot = UPLOAD_DIR #config.get('bisque.image_service.upload_dir', data_path('uploads'))
         upload_dir = '%s/%s'%(uploadroot, str(bq.core.identity.get_user().name)) # .user_name       
-        filename   = self.sanitize_filename(upload_file.filename)
+        filename   = sanitize_filename(upload_file.filename)
         filepath   = '%s/%s.%s'%(upload_dir, strftime('%Y%m%d%H%M%S'), filename)
         unpack_dir = '%s/%s.%s.EXTRACTED'%( upload_dir, strftime('%Y%m%d%H%M%S'), filename )
         _mkdir (unpack_dir)
         
-        # we'll store the original uploaded file
-        out = open (filepath,'wb')
-        shutil.copyfileobj (upload_file.file, out)
-        out.close()
+        filepath = self.localcopy(upload_file, filepath)
         members = []
         
         # extract all the series from the file
@@ -400,7 +482,7 @@ class import_serviceController(ServiceController):
     def extractSeriesVolocity(self, upload_file):
         ''' This method unpacks uploaded file and converts from Volocity to ome-tiff '''
         self.check_bioformats()
-        unpack_dir, members = self.unpackPackagedFile(upload_file, peserve_structure=True)      
+        unpack_dir, members = self.unpackPackagedFile(upload_file, preserve_structure=True)      
         
         log.debug('unpack_dir:\n %s'% unpack_dir ) 
         log.debug('members:\n %s'% members )         
@@ -421,6 +503,93 @@ class import_serviceController(ServiceController):
         log.debug('Converted: \n%s'% mvd2 )    
         return unpack_dir, mvd2
 
+#------------------------------------------------------------------------------
+# Import archives exported by a BISQUE system
+#------------------------------------------------------------------------------
+    def importBisqueArchive(self, file, tags):
+        
+        #-------------------------------------------------------------------
+        # parsePath : parses a path into hash of directories and a filename
+        #-------------------------------------------------------------------
+        def parsePath(filename):
+            (root, name) = os.path.split(filename)
+            dir = []
+            
+            while root:
+                root, nextDir = os.path.split(root)
+                dir = dir + [nextDir]
+            
+            dir.reverse()
+            return (dir, name)
+        
+        #-----------------------------------------------------------------------------------------
+        # ingestResource : recursively ingests a file hierarchy and returns top most parent's XML
+        #-----------------------------------------------------------------------------------------
+        def ingestResource(fileObj):
+            xml = etree.parse((fileObj.get('XML'))).getroot()
+
+            if fileObj.get('isDataset') is None:
+                if fileObj.get('FILE') is not None:
+                    #fileObjUp = UploadedFile(fileObj.get('FILE'), None, None)
+                    with open(fileObj.get('FILE')) as f:
+                        #sanitize_filename(os.path.basename(fileObj.get('FILE'))), 
+                        resource =  blob_service.store_blob(resource=xml, fileobj=f)
+                    return resource
+                else:
+                    return data_service.new_resource(resource = xml)
+            else:
+                del fileObj['isDataset']
+                del fileObj['XML'] 
+                
+                # delete value fields from the dataset XML
+                for value in xml.iter('value'):
+                    xml.remove(value)
+                
+                # iterate through children of the dataset
+                for member, fhash in fileObj.items():
+                    memberXML = ingestResource(fhash)
+                    value = etree.SubElement(xml, 'value', type='object')
+                    value.text = memberXML.get('uri')
+                
+                return data_service.new_resource(resource = xml)
+            return None
+
+
+        #---------------------------------------------------------------
+        #---------------------------------------------------------------
+        
+        unpack_dir, members = self.unpackPackagedFile(file, preserve_structure=True)
+        self.parent_uri = None
+        
+        memberHash = {}
+
+        # create a hash that maps flat file structure into a hierarchy
+        for member in members:
+            
+            if member == '_bisque.xml':
+                continue
+            
+            (dirs, name) = parsePath(member)
+            parent = memberHash
+            for dir in dirs:
+                parent[dir] = parent.get(dir) or {}
+                parent[dir]['isDataset'] = True
+                parent = parent[dir]
+            
+            (fname, ext) = os.path.splitext(name)
+            value = 'XML' if ext.lower() == '.xml' else 'FILE' 
+            entry = parent.get(fname) or {}
+            entry[value] = os.path.normpath(os.path.join(unpack_dir, member))
+            parent[fname] = entry
+
+        resources = []
+
+        # store resources and blobs with proper XML attached
+        for file in memberHash:
+            resources.append(ingestResource(memberHash.get(file)))
+        
+        return resources
+
 
 #---------------------------------------------------------------------------------------
 # filters, take f and return a list of file names
@@ -428,209 +597,167 @@ class import_serviceController(ServiceController):
 
     def filter_zip_multifile(self, f, intags):
         unpack_dir, members = self.unpackPackagedFile(f)
-        return [ '%s/%s'%(unpack_dir, m) for m in members ]
+        return self.insert_members([ '%s/%s'%(unpack_dir, m) for m in members ], f)
     
+    def filter_zip_bisque(self, f, intags):
+        return self.importBisqueArchive(f, intags)
+
     def filter_zip_tstack(self, f, intags):
-        return [self.process5Dimage(f, number_t=0, **intags)]
+        return self.insert_members([self.process5Dimage(f, number_t=0, **intags)], f)
     
     def filter_zip_zstack(self, f, intags):
-        return [self.process5Dimage(f, number_z=0, **intags)]
+        return self.insert_members([self.process5Dimage(f, number_z=0, **intags)], f)
     
     def filter_5d_image(self, f, intags):
-        return [self.process5Dimage(f, **intags)]
+        return self.insert_members([self.process5Dimage(f, **intags)], f)
 
     def filter_series_bioformats(self, f, intags):
         unpack_dir, members = self.extractSeriesBioformats(f)
-        return [ '%s/%s'%(unpack_dir, m) for m in members ]
+        return self.insert_members([ '%s/%s'%(unpack_dir, m) for m in members ], f)
 
     def filter_zip_volocity(self, f, intags):
         unpack_dir, members = self.extractSeriesVolocity(f)
-        return [ '%s/%s'%(unpack_dir, m) for m in members ]
-
-
-#    def insert_resource_url(self, url):
-#        filename = url.rsplit('/',1)[1]
-#        uniq = blob_service.make_uniq_hash(filename)
-#        perm = permission.PRIVATE
-#
-#        resource_type = blob_service.guess_type(filename)
-#
-#        resource = etree.Element(resource_type, perm=str(perm),
-#                                 resource_uniq = uniq,
-#                                 resource_name = filename,
-#                                 resource_value  = url)
-#        if resource_type == 'image':
-#            resource.set('src', "/image_service/images/%s" % uniq)
-#
-#        etree.SubElement(resource, 'tag', name="filename", value=filename)
-#        etree.SubElement(resource, 'tag', name="upload_datetime", value=datetime.now().isoformat(' '), type='datetime' ) 
-#            
-#        #log.debug("\n\ninsert_image tags: \n%s\n" % etree.tostring(tags))
-#
-#        log.info ("NEW IMAGE <= %s" % (etree.tostring(resource)))
-#        resource = data_service.new_resource(resource = resource)
-#        return resource
+        return self.insert_members([ '%s/%s'%(unpack_dir, m) for m in members ], f)
 
 #------------------------------------------------------------------------------
 # file ingestion support functions
 #------------------------------------------------------------------------------
    
-    def insert_image(self, f):
+    def insert_resource(self, uf):
         """ effectively inserts the file into the bisque database and returns 
         a document describing an ingested resource
         """
-        filename = self.sanitize_filename(f.filename)
-        src      = f.file
-        
-        # check the presense of tags with the file        
-        tags     = None
-        if hasattr(f, 'tags'): 
-            tags = copy.deepcopy(f.tags)
-            #tags = f.tags
-        
-        # check the presense of permission with the file
-        perm = 'private'
-        if hasattr(f, 'permission'):             
-            perm = f.permission
-
-        # dima: fix to add the tag
-        if hasattr(f, 'original') and f.original:
-            if tags is None:
-                tags = etree.Element('resource')
-            etree.SubElement(tags, 'tag', name="original_upload", value=f.original, type='resource' )      
-
         # try inserting the file in the blob service            
         try:
-            log.debug('Inserting blob: [%s] [%s] [%s] [%s]'%(src, filename, perm, tags))
-            resource = blob_service.store_blob (filesrc=src, filename=filename, permission=perm, tags=tags)
+            # determine if resource is already on a blob_service store
+            log.debug('Inserting %s ' % uf)
+            resource = blob_service.store_blob(resource=uf.resource, fileobj=uf.fileobj)
             log.debug('Inserted resource :::::\n %s'% etree.tostring(resource) )
-            # dima: Add specific image tags here
         except Exception, e:
-            log.exception("Error during store")
+            log.exception("Error during store %s" % etree.tostring(uf.resource))
             return None
         finally:
-            src.close()
-        
+            uf.close()
+
+        #uf.fileobj = None
+        #uf.resource = resource
         return resource
 
-    def process(self, f):
-        """ processes the file and either ingests it inplace or first applies 
+    def insert_members(self, filelist, uf):
+        parent_uri =  uf.resource.get('uri')
+        # pre-process succeeded          
+        log.debug('filter filelist: %s'% filelist )
+        resources = []
+        for fn in filelist:
+            name = os.path.basename(fn)
+            # Construct name based on original name
+            if uf.filename not in name:
+                name = '%s.%s'%(uf.filename, name )
+            resource = etree.Element ('resource', name=name)
+            resource.extend (copy.deepcopy (list (uf.resource)))
+            etree.SubElement(resource, 'tag', name="original_upload", value=parent_uri, type='resource' )      
+            myf = UploadedResource(fileobj=open(fn), resource=resource)
+            ### NOTE ### 
+            # could easily use self.process (myf)
+            resources.append(self.insert_resource(myf))
+        
+        return resources
+        
+    
+    def process(self, uf):
+        """ processes the UploadedResource and either ingests it inplace or first applies 
         some special pre-processing, the function returns a document 
         describing an ingested resource
         """
+
+        # This forces the the filename to part of actually file 
+        #if uf.path and not os.path.basename (uf.path).endswith( uf.filename):
+        #    newpath = "%s-%s" % (uf.path, uf.filename)
+        #    shutil.move ( uf.path, newpath)
+        #    uf.path = newpath
+        #    uf.resource.set ('value', 'file://%s' % newpath)
             
         # first if tags are present ensure they are in an etree format
-        if hasattr(f, 'tags') and f.tags is not None:
-            if hasattr(f.tags, 'file'):
-                f.tags = etree.parse (f.tags.file).getroot()
-            elif isinstance(f.tags, basestring):
-                f.tags = etree.fromstring(f.tags)
-
         # figure out if a file requires special processing
-        intags = None
-        if hasattr(f, 'tags') and f.tags is not None: 
-            xl = f.tags.xpath('//tag[@name="ingest"]')
-            if len(xl)>0:
-                intags = dict([(t.get('name'), t.get('value')) 
-                               for t in xl[0].xpath('tag') 
-                                   if t.get('value') is not None and t.get('name') is not None ])
-                # remove the ingest tags from the tag document
-                f.tags.remove(xl[0])
+        intags = {}
+        xl = uf.resource.xpath('//tag[@name="ingest"]')
+        if len(xl):
+            intags = dict([(t.get('name'), t.get('value')) 
+                           for t in xl[0].xpath('tag') 
+                               if t.get('value') is not None and t.get('name') is not None ])
+            # remove the ingest tags from the tag document
+            uf.resource.remove(xl[0])
 
         # append processing tags based on file type and extension
-        mime = mimetypes.guess_type(self.sanitize_filename(f.filename))[0]
+        mime = mimetypes.guess_type(sanitize_filename(uf.filename))[0]
         if mime in self.filters:
-            if intags is not None:
-                intags['type'] = mime
-            else:
-                intags = {'type': mime}
-        
-        # check access permission
-        f.permission = 'private'
-        if intags is not None and 'permission' in intags:
-            f.permission = intags['permission']
-        
-        # no processing required        
-        if intags is None or 'type' not in intags or intags['type'] not in self.filters:
-            return self.insert_image(f)
+            intags['type'] = mime
+        # no processing required   
+        if intags.get('type') not in self.filters:
+            return self.insert_resource(uf)
+        # Processing is required
+        return self.process_filtered(uf, intags)
 
+    def process_filtered(self, uf, intags):
         # start processing
-        else:
-            log.debug('process -------------------\n %s'% intags )
-            error = None
-            try:
-                nf = self.filters[ intags['type'] ](f, intags)
-            except Exception, e:
-                log.exception('Problem in processing file: %s'  % intags['type'])
-                error = 'Problem processing the file: %s'%e
-           
-            # some error during pre-processing
-            if error is not None:
-                log.debug('filters error: %s'% error )                
-                resource = etree.Element('file', name=f.filename)
-                etree.SubElement(resource, 'tag', name='error', value=error)
-                return resource
+        log.debug('process -------------------\n %s'% intags )
+        error = None
+        # Ensure the uploaded file is local and named properly.
+        tags = copy.deepcopy (list (uf.resource))
+        del uf.resource[:]
+        resource = self.insert_resource (uf)
+        resource.extend (tags)
+        try:
+            # call filter on f with ingest tags
+            resources = self.filters[ intags['type'] ](UploadedResource(resource), intags)
+        except Exception, e:
+            log.exception('Problem in processing file: %s : %s'  % (intags['type'], uf))
+            error = 'Problem processing the file: %s'%e
 
-            # include the parent file into the database            
-            parent_uri = None
-            try:
-                resource_parent = blob_service.store_blob (filesrc=f.file, filename=os.path.split(f.filename)[-1], permission=f.permission)
-                parent_uri = resource_parent.get('uri')
-            except Exception, e:
-                log.exception("Error during store")  
-            finally:
-                f.file.close()
+        # some error during pre-processing
+        if error is not None:
+            log.debug('filters error: %s'% error )                
+            resource = etree.Element('file', name=uf.filename)
+            etree.SubElement(resource, 'tag', name='error', value=error)
+            return resource
 
-            # pre-process succeeded          
-            log.debug('filters nf: %s'% nf )            
-            resources = []
-            for n in nf:
-                name = os.path.split(n)[-1]
-                if f.filename not in name:
-                    name = '%s.%s'%(f.filename, name )
-                myf = UploadedFile(n, name, f.tags)
-                if parent_uri: myf.original = parent_uri
-                myf.permission = f.permission
-                resources.append( self.insert_image(myf) )
+        # some error during pre-processing
+        if len(resources)<1:
+            log.debug('error while extracting images, none extracted' )
+            resource = etree.Element('file', name=uf.filename)
+            etree.SubElement(resource, 'tag', name='error', value='error while extracting images, none extracted')
+            return resource    
 
-            # some error during pre-processing
-            if len(resources)<1:
-                log.debug('error while extracting images, none extracted' )
-                resource = etree.Element('file', name=f.filename)
-                etree.SubElement(resource, 'tag', name='error', value='error while extracting images, none extracted')
-                return resource    
-            
-            # if only one resource was inserted, return right away
-            if len(resources)==1:
-                return resources[0]
-                
-            # multiple resources ingested, we need to group them into a dataset and return a reference to it
-            # now we'll just return a stupid stub
-            ts = datetime.now().isoformat(' ')
-            resource = etree.Element('dataset', name='%s'%(f.filename))
-            etree.SubElement(resource, 'tag', name="upload_datetime", value=ts, type='datetime' )             
-            if parent_uri:
-                etree.SubElement(resource, 'tag', name="original_upload", value=parent_uri, type='resource' )   
-                        
-            index=0
-            for r in resources:
-                # check for ingest errors here as well
-                if r.get('uri') is not None:
-                    # index is giving trouble
-                    #v = etree.SubElement(resource, 'value', index='%s'%index, type='object')
-                    v = etree.SubElement(resource, 'value', type='object')
-                    v.text = r.get('uri')
-                else:
-                    s = 'Error ingesting element %s with the name "%s"'%(index, r.get('name'))
-                    etree.SubElement(resource, 'tag', name="error", value=s )                    
-                index += 1
-                
-            log.debug('process resource :::::\n %s'% etree.tostring(resource) )
-                
-            resource = data_service.new_resource(resource=resource) # dima: possible to request on post???
-            resource = data_service.get_resource(resource.get('uri'), view='deep')
-            log.debug('process created resource :::::\n %s'% etree.tostring(resource) )
-            return resource            
+        # if only one resource was inserted, return right away
+        if len(resources)==1:
+            return resources[0]
+
+        # multiple resources ingested, we need to group them into a dataset and return a reference to it
+        # now we'll just return a stupid stub
+        ts = datetime.now().isoformat(' ')
+        resource = etree.Element('dataset', name='%s'%(uf.filename))
+        etree.SubElement(resource, 'tag', name="upload_datetime", value=ts, type='datetime' )             
+
+        if self.parent_uri is not None:
+            etree.SubElement(resource, 'tag', name="original_upload", value=self.parent_uri, type='resource' )   
+
+        index=0
+        for r in resources:
+            # check for ingest errors here as well
+            if r.get('uri') is not None:
+                # index is giving trouble
+                #v = etree.SubElement(resource, 'value', index='%s'%index, type='object')
+                v = etree.SubElement(resource, 'value', type='object')
+                v.text = r.get('uri')
+            else:
+                s = 'Error ingesting element %s with the name "%s"'%(index, r.get('name'))
+                etree.SubElement(resource, 'tag', name="error", value=s )                    
+            index += 1
+
+        log.debug('processed resource :::::\n %s'% etree.tostring(resource) )
+        resource = data_service.new_resource(resource=resource, view='deep') # dima: possible to request on post???
+        log.debug('process created resource :::::\n %s'% etree.tostring(resource) )
+        return resource            
 
     def ingest(self, files):
         """ ingests each elemen of the list of files
@@ -698,7 +825,6 @@ class import_serviceController(ServiceController):
 #
 #------------------------------------------------------------------------------
     
-
     @expose(content_type="text/xml")
     @require(predicates.not_anonymous())
     def transfer(self, **kw):
@@ -710,15 +836,60 @@ class import_serviceController(ServiceController):
         'x_tags' where x can be any string. 
         
         """
-        #log.debug("TRANSFER %s"  % (kw))
+        #log.debug("TRANSFER %s"  % kw)
         #log.debug("BODY %s " % request.body[:100])
-        params = dict (kw)
         files = []
-        for pname, f in params.items():
-            if (pname.endswith ('_tags')): continue
+        transfers = dict(kw)
+        '''find a related parameter (to pname) containing resource XML
+        
+            :param transfer: hash of form parameters
+            :param pname   : field parameter of file object
+            '''
+
+        def find_upload_resource(transfers, pname):
+            resource = transfers.pop(pname+'_resource', None) or transfers.pop(pname+'_tags', None)
+            if resource:
+                try:
+                    if hasattr(resource, 'file'):
+                        log.warn("XML Resource has file tag")
+                        resource = etree.parse (f.file).getroot()
+                    elif isinstance(resource, basestring):
+                        resource = etree.fromstring(resource)
+                        if not resource.get('name'):
+                            resource.set('name', getattr(f, 'filename', ''))
+                except:
+                    log.exception("Couldn't read resource parameter %s" % resource)
+                    resource = None
+            return resource
+
+        log.debug("TRANSFER %s"  % kw)
+        for pname, f in transfers.items():
+            if pname.endswith ('_resource') or pname.endswith('_tags'): continue
             if hasattr(f, 'file'):
-                f.tags = params.get (pname+'_tags', None)
-                files.append(f)
+                # Uploaded File from multipart-form 
+                transfers.pop(pname)
+                resource = find_upload_resource(transfers, pname) 
+                files.append(UploadedResource(fileobj=f.file, resource=resource))
+            if pname.endswith('.uploaded'):
+                # Entry point for NGINX upload and insert
+                transfers.pop(pname)
+                resource = etree.fromstring (f)
+                payload_resource = find_upload_resource(transfers, pname.replace ('.uploaded', ''))
+                if payload_resource:
+                    resource = merge_resources (resource, payload_resource)
+                upload_resource  = UploadedResource(resource=resource)
+                files.append(upload_resource)
+                log.debug ("UPLOADED %s" % upload_resource)
+        log.debug("TRANSFER after files %s"  % transfers)
+
+        for pname, f in transfers.items():
+            if (pname.endswith ('_resource')): 
+                transfers.pop(pname)
+                resource = etree.fromstring(f)
+                files.append(UploadedResource(resource=resource))
+
+        log.debug("TRANSFER after resources %s"  % transfers)
+        # Should reject anything not matching
 
         # process the file list see if some files need special processing
         # e.g. ZIP needs to be unpacked
@@ -758,21 +929,52 @@ class import_serviceController(ServiceController):
         """insert a URL to a fixed resource. This allows  insertion 
         of  resources  when they are already present on safe media
         i.e on the local server drives or remote irods, hdfs etc.
+        """
+        log.info ('insert %s for %s' % (url, user))
+        log.warn ("DEPRECATED ENTRY POINT: use insert_resource")
 
-        Local URL should not include  scheme i.e forgot the file://
-        irods://irods.host.org/zone/..  The bisque system must have rights to read the file
+        if user is not None and identity.current.user_name == 'admin':
+            identity.current.set_current_user( user )
+        resource = etree.Element('resource', name=filename, permission=permission, value=url)
+        if 'tags' in kw:
+            try:
+                tags = etree.fromstring(kw['tags'])
+                resource.extend(list(tags))
+            except Exception,e: # dima: possible exceptions here, ValueError, XMLSyntaxError
+                del kw['tags']
+        kw['insert.resource'] = etree.tostring(resource)
+        return self.transfer (** kw)
+
+    @expose(content_type="text/xml")
+    @require(predicates.not_anonymous())
+    def insert_XXresource(self, resource,  user=None, **kw):
+        """insert a  fixed resource. This allows  insertion 
+        of  resources  when they are already present on safe media
+        i.e on the local server drives or remote irods, hdfs etc.
+
+        Supported URL schemes must be enabled in blob_storage.
+        This routine will report an error for illegal schemes
         """
         # Note: This entrypoint should allow permission and tags to be inserted
         # in a similar way to tranfers.. maybe combining the two would be needed.
         log.info ('insert %s for %s' % (url, user))
+
+        if hasattr(resource, 'file'):
+            resource = etree.parse(resource.file)
+        else:
+            resource = etree.fromstring(resource)
+        
         try:
             if user is not None and identity.current.user_name == 'admin':
                 identity.current.set_current_user( user )
-            resource =  blob_service.store_blob(filename=filename, url=url, permission=permission, **kw)
-            return etree.tostring(resource)
+
+            rlist  = [ UploadedResource ( resource = resource) ]
+            response = self.ingest (rlist)
+            return etree.tostring(response)
         except Exception,e:
             log.exception("insert: %s %s" % (url, filename))
             abort(500, "exception during url insert")
+
 
 
         

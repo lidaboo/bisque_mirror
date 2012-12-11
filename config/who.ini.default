@@ -39,21 +39,18 @@ use = bq.core.lib.autoreg:AutoRegister
 
 #LDAP
 # dependency:  repoze.who.plugins.ldap
-# [plugin:ldap_auth]
-# use = bq.core.lib.ldap_auth:LDAPAuthenticatorPluginExt
-# #  your ldap service
-# ldap_connection = ldap://directory.ucsb.edu
-# returned_id=login
-# # This is the base of the 'distinguished names' (DNs) of persons in your
-# # particular LDAP instance.  It will vary from server to server.
-# base_dn = o=ucsb
+#LDAP[plugin:ldap_auth]
+#use = bq.core.lib.ldap_auth:LDAPAuthenticatorPluginExt
+#  your ldap service
+#ldap_connection = ldap://directory.ucsb.edu
+#ldap_connection = ldaps://ldap.ucsb.edu:636
+#returned_id=login
+# This is the base of the 'distinguished names' (DNs) of persons in your
+# particular LDAP instance.  It will vary from server to server.
+#base_dn= ou=People,o=ucsb
+#attributes = uid,cn,sn,mail
+#auto_register = autoregister
 
-# [plugin:ldap_attributes]
-# # I also do some overriding for more security in how I get attributes for
-# # users.
-# use = bq.core.lib.ldap_auth:LDAPAttributesPluginExt
-# ldap_connection = ldap://directory.ucsb.edu
-# attributes = uid,cn,sn,mail
 
 # OpenID
 # dependency:  repoze.who.plugins.openid
@@ -138,6 +135,6 @@ plugins =
 plugins =
     bq.core.lib.sqlauth:md_plugin
     bq.core.lib.sqlauth:md_group_plugin
-    autoregister
+#    autoregister
 
        

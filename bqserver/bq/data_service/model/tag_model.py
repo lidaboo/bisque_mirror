@@ -66,7 +66,7 @@ from sqlalchemy import Table, Column, ForeignKey
 from sqlalchemy import Integer, String, DateTime, Unicode, Float, Boolean
 from sqlalchemy import Text, UnicodeText
 from sqlalchemy.orm import relation, class_mapper, object_mapper, validates, backref, synonym
-from sqlalchemy import exceptions
+from sqlalchemy import exc
 from sqlalchemy.sql import and_, case
 from sqlalchemy.ext.associationproxy import association_proxy
 from sqlalchemy.ext.hybrid import hybrid_property, hybrid_method
@@ -606,6 +606,7 @@ class BQUser(Taggable):
         dn.value = tg_user.display_name or tg_user.user_name
         dn.owner = self
         self.owner = self
+        self.permission = 'published'
         
     @classmethod
     def new_user (cls, email, password, create_tg = False):
@@ -886,6 +887,7 @@ def bquser_callback (tg_user, operation, **kw):
             u.value = tg_user.email_address
             dn = u.findtag('display_name', create=True)
             dn.value = tg_user.display_name
+            dn.permission = 'published'
             log.info ('updated BQUSER %s' % u.name)
         return
 

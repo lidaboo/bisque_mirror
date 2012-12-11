@@ -6,6 +6,8 @@ import logging
 import httplib2 
 import urlparse
 import os
+import datetime
+from bq.release import __VERSION__
 
 from tg import request, response, expose, config
 from lxml import etree
@@ -40,6 +42,8 @@ class ArchiveStreamer():
         log.debug("ArchiveStreamer: Begin stream %s" % request.url)
         
         flist = self.fileInfoList(self.fileList, self.datasetList, self.urlList)
+        flist = self.writeSummary(flist, self.archiver)
+        
         for file in flist:
             self.archiver.beginFile(file)
             while not self.archiver.EOF():
@@ -54,11 +58,26 @@ class ArchiveStreamer():
     # Utility functions 
     # ------------------------------------------------------------------------------------------
     
+    # Creates an export summary file
+    def writeSummary(self, flist, archiver):
+        summary = etree.Element('resource', type='BISQUE Export Log')
+        etree.SubElement(summary, 'tag', name='Server', value=config.get('bisque.root'))
+        etree.SubElement(summary, 'tag', name='Version', value=__VERSION__)
+        etree.SubElement(summary, 'tag', name='Export_DateTime', value=str(datetime.datetime.now()))
+        
+        flist.append(dict(  name        =   '_bisque.xml',
+                            content     =   etree.tostring(summary),
+                            dataset     =   '',
+                            extension   =   'URL'))
+        
+        return flist
+
+    
     # Returns a list of fileInfo objects based on files' URIs
     def fileInfoList(self, fileList, datasetList, urlList):
         
         def fileInfo(dataset, uri, index=0):
-            xml     =   data_service.get_resource(uri, view='deep')
+            xml     =   data_service.get_resource(uri, view='deep,clean')
             name    =   xml.get('name') 
 
             # try to figure out a name for the resource
@@ -101,6 +120,7 @@ class ArchiveStreamer():
                 return None
             items = (header.get('content-disposition') or header.get('Content-Disposition') or '').split(';')
             fileName = str(index) + '.'
+            
             log.debug('Respose headers: %s'%header)
             log.debug('items: %s'%items)
             
@@ -139,9 +159,18 @@ class ArchiveStreamer():
         if len(datasetList)>0:     # empty datasetList
             for uri in datasetList:
                 fileHash = {}
-                dataset = data_service.get_resource(uri, view='full')
+
+                dataset = data_service.get_resource(uri, view='full,clean')
                 name = dataset.xpath('/dataset/@name')[0]
                 members = dataset.xpath('/dataset/value')
+
+                # Insert dataset XML into file list
+                flist.append(dict(  name        =   name+'.xml',
+                                    content     =   etree.tostring(dataset),
+                                    dataset     =   '',
+                                    extension   =   'URL'))
+
+                
                 for index, member in enumerate(members):
                     finfo = fileInfo(name, member.text, index)
 

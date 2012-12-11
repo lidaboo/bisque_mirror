@@ -59,11 +59,10 @@ Ext.define('Bisque.Resource.Mex.Compact',
         
         var propsGrid=this.GetPropertyGrid({width:270}, tagArr);
         
-        if (this.ttip) {
-            if (tagArr.length>0)
-                this.ttip.add(propsGrid);
-    		this.ttip.setLoading(false);
-	    }
+        if (tagArr.length>0 && this.ttip)
+            this.ttip.add(propsGrid);
+        if (this.ttip)            
+		    this.ttip.setLoading(false);
 	},
 
     prefetch : function()
@@ -109,6 +108,76 @@ Ext.define('Bisque.Resource.Mex.Compact',
         this.setLoading(false);
     },
 });
+
+
+Ext.define('Bisque.Resource.Mex.Card',
+{
+    extend : 'Bisque.Resource.Card',
+    
+    prefetch : function(layoutMgr)
+    {
+        this.superclass.superclass.prefetch.apply(this, arguments);
+
+        if (!this.getData('fetched'))
+        {
+            this.setData('fetched', -1);    //Loading
+            BQFactory.load(this.resource.uri + '/tag?view=deep', Ext.bind(this.loadResource, this));
+        }
+    },
+
+    loadResource : function(data)
+    {
+        this.resource.tags = data.tags;
+        var tagProp, tagArr=[], tagsFlat = this.resource.toDict(true);
+
+        // Show preferred tags first
+        for (var tag in tagsFlat)
+        {
+            tagProp = new Ext.grid.property.Property({
+                                                        name: tag,
+                                                        value: tagsFlat[tag]
+                                                    });
+            (tag.indexOf('inputs')!=-1 || tag.indexOf('outputs')!=-1)?tagArr.unshift(tagProp):tagArr.push(tagProp);
+        }
+        
+        this.setData('tags', tagArr.slice(0, 12));
+        this.setData('fetched', 1); //Loaded
+
+        var renderedRef=this.getData('renderedRef')
+        if (renderedRef && !renderedRef.isDestroyed)
+            renderedRef.updateContainer();
+    },
+    
+});
+
+
+Ext.define('Bisque.Resource.Mex.Full',
+{
+    extend : 'Bisque.Resource.Full',
+    
+    loadResource : function(data)
+    {
+        this.resource.tags = data.tags;
+        var tagProp, tagArr=[], tagsFlat = this.resource.toDict(true);
+
+        // Show preferred tags first
+        for (var tag in tagsFlat)
+        {
+            tagProp = new Ext.grid.property.Property({
+                                                        name: tag,
+                                                        value: tagsFlat[tag]
+                                                    });
+            tagArr.push(tagProp);
+        }
+        
+        this.setData('tags', tagArr);
+        this.setData('fetched', 1); //Loaded
+
+        var renderedRef=this.getData('renderedRef')
+        if (renderedRef && !renderedRef.isDestroyed)
+            renderedRef.updateContainer();
+    },
+})
 
 Ext.define('Bisque.Resource.Mex.List',
 {
@@ -265,23 +334,17 @@ Ext.define('Bisque.Resource.Mex.Grid',
 {
     extend : 'Bisque.Resource.Mex',
     
-    getFields : function()
+    getFields : function(cb)
     {
-        var fields = this.callParent();
-        fields[1] = fields[1].toUpperCase();
-        var status = fields[2], color='#22F';
-        if (status=='FINISHED')
-            color = '#1C1'
-        else if (status=='FAILED')
-            color = '#E11'
-        
-        fields[2] = '<div style="color:'+color+'">'+fields[2]+'</div>';
-        return fields;
+        var status = this.resource.status || 'unknown', resource = this.resource;
+        var color = (status=='FINISHED') ? '#1C1' : (status=='FAILED') ? '#E11' : '#22F';
+       
+        return ['', resource.name || '', '<div style="color:'+color+'">'+Ext.String.capitalize(status.toLowerCase())+'</div>' || '', resource.resource_type, resource.ts, this, {height:21}];
     }
 });
 
 // Page view for a mex
-Ext.define('Bisque.Resource.Mex.Page',
+/*Ext.define('Bisque.Resource.Mex.Page',
 {
     extend : 'Bisque.Resource.Page',
     
@@ -289,7 +352,7 @@ Ext.define('Bisque.Resource.Mex.Page',
     {
         window.location = bq.url('/module_service/'+config.resource.name+'/?mex='+config.resource.uri);
     }
-});
+});*/
 
         
 

@@ -57,15 +57,15 @@ import sqlalchemy
 
 import  pylons 
 from pylons.controllers.util import abort
+from paste.deploy.converters import asbool
 from sqlalchemy import desc
 from sqlalchemy.orm import Query
+
 import tg
 from tg import controllers, redirect, expose, response, request
 from tg import require
 from tg.controllers import CUSTOM_CONTENT_TYPE
-
 from lxml import etree
-
 from repoze.what.predicates import not_anonymous
 
 
@@ -74,15 +74,19 @@ from bq.core.model import metadata, DBSession
 from bq.data_service.model  import Taggable, Image, dbtype_from_tag, dbtype_from_name, all_resources
 from bq.util.bisquik2db import bisquik2db, db2tree
 
-from resource import Resource
-from resource_query import resource_query, resource_load, resource_count, resource_auth, resource_permission, resource_delete
-from resource_query import RESOURCE_READ, RESOURCE_EDIT
+from .resource import Resource
+from .resource_query import resource_query, resource_load, resource_count, resource_auth, resource_permission, resource_delete
+from .resource_query import RESOURCE_READ, RESOURCE_EDIT
+from .formats import find_formatter 
 
 log = logging.getLogger("bq.data_service.bisquik_resource")
 
-from formats import find_formatter 
+
+#PROTECTED = [ 'module', 'mex', 'system' ]
+PROTECTED = [  ]
 
 class ResourceAuth(Resource):
+    'Handle resource authorization records'
 
     def __init__(self, baseuri):
         self.baseuri = baseuri
@@ -95,6 +99,7 @@ class ResourceAuth(Resource):
         return int
     
     def dir(self, **kw):
+        'Read the list of authorization records associated with the parent resource'
         format = kw.pop('format', None)
         view = kw.pop('view', None)
         resource = self.force_dbload(request.bisque.parent)
@@ -113,13 +118,15 @@ class ResourceAuth(Resource):
     def modify(self, factory, xml, **kw):
         return self.new (factory, xml, **kw)
     
-    def new(self, factory,  xml, **kw):
+    def new(self, factory,  xml, notify=True, **kw):
+        'Create/Modify resource auth records'
         format = None
         resource = self.force_dbload(request.bisque.parent)
         log.debug ("AUTH %s with %s" % (resource, xml))
         resource = self.force_dbload(resource)
         #DBSession.autoflush = False
-        resource = resource_auth (resource, parent = None, action=RESOURCE_EDIT, newauth=etree.XML(xml))
+        resource = resource_auth (resource, parent = None, action=RESOURCE_EDIT, newauth=etree.XML(xml), 
+                                  notify=asbool(notify))
         response = etree.Element('resource')
         tree = db2tree (resource,  parent = response, baseuri=self.baseuri)
         formatter, content_type  = find_formatter (format)
@@ -173,10 +180,16 @@ class BisquikResource(Resource):
         return self.force_dbload(parent)
 
     def check_access(self, query, action=RESOURCE_READ):
-        if  action == RESOURCE_EDIT and not identity.not_anonymous():
+        if action == RESOURCE_EDIT and self.resource_name in PROTECTED:
+            log.debug ("PROTECTED RESOURCE")
+            abort(403)
+        if action == RESOURCE_EDIT and not identity.not_anonymous():
+            log.debug ("EDIT denied because annonymous")
             abort(401)
-        
-        if query and isinstance(query, Query):
+
+        if query is None:
+            return None
+        if  isinstance(query, Query):
             query = resource_permission(query, action=action)
         else:
             #   Previously loaded resource .. recreate query but with
@@ -219,7 +232,7 @@ class BisquikResource(Resource):
         tags=tag expression i.e. [TAG:]VAL [AND|OR [TAG:]VAL]+
         xxx=val match an attribute on the resorce
         """
-        view  = kw.pop('view', None)
+        view  = kw.pop('view', 'short')
         tag_query = kw.pop('tag_query', '')
         tag_order = kw.pop('tag_order', '')
         wpublic = kw.pop('wpublic', None)
@@ -233,6 +246,7 @@ class BisquikResource(Resource):
         user_id = request.bisque.user_id
 
         if view=='count':
+            limit=None
             count = resource_count(self.resource_type,
                                    parent = parent,
                                    user_id = user_id,
@@ -278,21 +292,20 @@ class BisquikResource(Resource):
     @expose(content_type='text/xml') # accept_format="text/xml")
     #@require(not_anonymous())
     def new(self, factory,  xml, **kw):
-        """POST /ds/images : Create a reference to the image in the local database
-        POST /ds/images/12/tags
+        """POST /ds/image : Create a reference to the image in the local database
         """
         view=kw.pop('view', None)
         format = kw.pop('format', None)
         log.info ("NEW: %s %s " %(request.url, xml) )
         
         # Create a DB object from the document.
-        if  not identity.not_anonymous():
-            pylons.response.status_int = 401    
-            return '<response status="FAIL">Permission denied</response>'
+        #if  not identity.not_anonymous():
+        #    pylons.response.status_int = 401    
+        #    return '<response status="FAIL">Permission denied</response>'
 
         parent = self.load_parent()
-        if parent:
-            parent = self.check_access(parent, RESOURCE_EDIT)
+        #if parent:
+        parent = self.check_access(parent, RESOURCE_EDIT)
         resource = bisquik2db(doc=xml, parent = parent)
         log.info ("NEW: => %s " %(str(resource)) )
         if resource is not None:
@@ -338,7 +351,7 @@ class BisquikResource(Resource):
         """GET /ds/images/1 : fetch the resource
         """
         log.info ('GET  %s' % (request.url))
-        view=kw.pop('view', None)
+        view=kw.pop('view', 'short')
         format = kw.pop('format', None)
         resource = self.check_access(resource)
         log.info ("GET ==>%s" % str(resource))

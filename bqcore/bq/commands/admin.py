@@ -1,9 +1,11 @@
 import sys
 import os
+import subprocess
 import re
 import pkg_resources
 import bq
 import optparse
+import errno
 from bq.release import __VERSION__
 
 def load_config(filename):
@@ -68,6 +70,7 @@ class server(object):
         parser.add_option("-v", "--verbose", action="store_true", help="show commands as run" )
         parser.add_option("-w", "--wait", action="store_true", help="wait for children" )
         parser.add_option("-s", "--site", help="specify location of site.cfg" )
+        parser.add_option("-f", "--force", action="store_true", default=False, help="try force start or stop: ignore old pid files etc." )
         options, args = parser.parse_args()
         self.command = self.options = None
         if len(args) < 1 or args[0] not in ['start', 'stop', 'restart', 'echo', ]:
@@ -164,13 +167,19 @@ class deploy(object):
         self.options = options
 
     def run(self):
-        if 'public' in self.args:
-            self.deploy_public()
+        #if 'public' in self.args:
+        self.deploy_public()
+        
+        
 
     def deploy_public(self):
         ''
         import pkg_resources
-        if not os.path.exists('public'):
+        if  os.path.exists('public'):
+            print "Warning public exists"
+            print "Please remove public before continuing"
+            return
+        else:
             os.makedirs ('public')
         for x in pkg_resources.iter_entry_points ("bisque.services"):
             try:
@@ -194,7 +203,14 @@ class deploy(object):
         import glob
         for l in glob.glob('bqcore/bq/core/public/*'):
             os.symlink (os.path.join('..', l), os.path.join('public', os.path.basename(l)))
-
+        #check if grunt exists, if so, run it to pack and minify javascript
+        try:
+            subprocess.call(["grunt"])
+        except OSError as e:
+            if e.errno == errno.ENOENT:
+                print "grunt not found.\n install it by typing 'npm install -g grunt'"
+            else:
+                print "Unknown error while trying to run grunt. Is it installed correctly?\n install it by typing 'npm install -g grunt'"
 
 class preferences (object):
     desc = "read and/or update preferences"

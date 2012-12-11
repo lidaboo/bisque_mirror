@@ -30,16 +30,13 @@ except:
     def add_default_credentials(headers):
         pass
 
-
-
-
 def start(need_async=False):
     cachedir=config.get('bisque.http_client.cache_dir', data_path('client_cache'))
     global local_client
     log.debug ("starting http")
     if not os.path.exists(cachedir):
         os.makedirs(cachedir)
-    local_client = Http(cachedir)
+    local_client = Http(cachedir, disable_ssl_certificate_validation=True)
     if need_async:
         async_request_pool.start_pool_handler()
 
@@ -139,7 +136,7 @@ def post_files (url,  fields = None, **kw):
     """
 
     
-    headers, body = encode.multipart_encode(fields)
+    body, headers = encode.multipart_encode(fields)
     return request(url, 'POST', headers=headers, body=body, **kw)
 
 def get_file (url):

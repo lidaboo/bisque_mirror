@@ -117,6 +117,11 @@ Ext.define('Bisque.Resource.Image',
         }
     },
     
+    /* Resource operations */
+    downloadOriginal : function()
+    {
+        window.open(this.resource.src);
+    },
 });
 
 Ext.define('Bisque.Resource.Image.Compact',
@@ -258,10 +263,11 @@ Ext.define('Bisque.Resource.Image.Compact',
         {
             this.resource.tags = data.tags;
             var geometry = this.resource.find_tags('geometry') || {value:'1,1,1,1,1'};
-            this.resource.geometry = geometry.value.split(',');
-            
-            this.resource.z = parseInt(this.resource.geometry[2]);
-            this.resource.t = parseInt(this.resource.geometry[3]);
+            if (geometry && geometry.value) {
+                this.resource.geometry = geometry.value.split(',');
+                this.resource.z = parseInt(this.resource.geometry[2]);
+                this.resource.t = parseInt(this.resource.geometry[3]);
+            }
             this.setData('tags', 'true');
         }
 
@@ -605,8 +611,8 @@ Ext.define('Bisque.Resource.Image.Full',
     },
 
     onMouseMove : Ext.emptyFn,
-    preMouseEnter : Ext.emptyFn,
-    preMouseLeave : Ext.emptyFn,
+    //preMouseEnter : Ext.emptyFn,
+    //preMouseLeave : Ext.emptyFn,
     onMouseEnter : Ext.emptyFn
 });
 
@@ -622,12 +628,12 @@ Ext.define('Bisque.Resource.Image.Grid',
         prefetchImg.src = this.resource.src+'?thumbnail=75,75&format=jpeg';
     },
     
-    // convert ArrayStore to JsonStore?
-    getFields : function()
+    getFields : function(cb)
     {
         var fields = this.callParent();
         fields[0] = '<img style="height:40px;width:40px;" src='+this.resource.src+'?thumbnail=75,75&format=jpeg />';
         fields[6].height = 48;
+
         return fields;
     },
 });
@@ -682,10 +688,8 @@ Ext.define('Bisque.Resource.Image.Page',
             },
         });
         
-        var resTab = Ext.create('Ext.tab.Panel',
-        {
+        var resTab = Ext.create('Ext.tab.Panel', {
             title : 'Metadata',
-    
             region : 'east',
             activeTab : 0,
             border : false,
@@ -701,6 +705,7 @@ Ext.define('Bisque.Resource.Image.Page',
         var viewerContainer = Ext.create('BQ.viewer.Image', {
             region      :   'center',
             resource    :   this.resource,
+            toolbar     :   this.toolbar,
             parameters  :   {
                                 gobjectCreated  :   Ext.bind(function(gob)
                                                     {
@@ -791,15 +796,15 @@ Ext.define('Bisque.Resource.Image.Page',
         });
         resTab.add(this.gobjectTagger);
 
-        var map = Ext.create('BQ.gmap.GMapPanel3',  {
+        resTab.add({        
+            xtype: 'bqgmap',
             title: 'Map',
             url: this.resource.src+'?meta',
             zoomLevel: 16,
             gmapType: 'map',
             autoShow: true,
         });
-        resTab.add(map);
-        
+                
         this.setLoading(false);
     },
     

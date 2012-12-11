@@ -12,7 +12,6 @@ from bq.dataset_service import model
 from bq import data_service
 from bq import module_service
 
-
 log = logging.getLogger('bq.dataset')
 
 
@@ -115,6 +114,12 @@ class TagEditOp (DatasetOp):
 
         return None
 
+class ShareOp (DatasetOp):
+    'Apply sharing options to  each member'
+    def action(self, member, auth, **kw):
+        member = member.text
+        data_service.auth_resource(member, action=data_service.RESOURCE_EDIT, auth=auth, notify=False)
+        return None
 
 
 #---------------------------------------------------------------------------------------
@@ -131,7 +136,8 @@ class DatasetServer(ServiceController):
         'module' : ModuleOp,
         'permission' : PermissionOp,
         'delete' : DeleteOp,
-        'tagedit' : TagEditOp
+        'tagedit' : TagEditOp,
+        'share' : ShareOp,
         }
     
     def __init__(self, server_url):
@@ -214,8 +220,6 @@ class DatasetServer(ServiceController):
         members = dataset.xpath('./value')
         data_service.del_resource(dataset)
         return self.iterate (operation='delete', dataset=dataset, members=members, **kw)
-
-
         
     @expose(content_type="text/xml")
     @require(predicates.not_anonymous())
@@ -228,6 +232,16 @@ class DatasetServer(ServiceController):
     @require(predicates.not_anonymous())
     def tagedit(self, duri, **kw):
         return self.iterate(duri, operation='tagedit', **kw)
+
+    @expose(content_type="text/xml")
+    @require(predicates.not_anonymous())
+    def share(self, duri, **kw):
+        'Apply share settings of dataset to all members'
+        dataset_auth = data_service.auth_resource(duri)
+        log.debug ("dataset: auth setting members of %s to %s" % (duri, etree.tostring(dataset_auth)))
+        return self.iterate(duri, operation='share', auth=dataset_auth, **kw)
+
+
 
 
 #---------------------------------------------------------------------------------------

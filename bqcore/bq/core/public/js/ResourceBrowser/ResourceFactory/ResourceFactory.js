@@ -171,10 +171,12 @@ Ext.define('Bisque.Resource',
             cls : 'lblHeading2',
             html : this.resource.resource_type,
         })
+        
+        var owner = BQApp.userList[this.resource.owner] || {};
 
         var value = Ext.create('Ext.container.Container', {
             cls : 'lblContent',
-            html : this.resource.value,
+            html : owner.display_name,
         })
 
         this.add([name, type, value]);
@@ -184,8 +186,26 @@ Ext.define('Bisque.Resource',
     // getFields : returns an array of data used in the grid view
     getFields : function()
     {
-        var resource = this.resource;
-        return ['', resource.name || '', resource.value || '', resource.resource_type, resource.ts, this, {height:21}]
+        var resource = this.resource, record = BQApp.userList[this.resource.owner];
+        var name = record ? record.find_tags('display_name').value : ''
+       
+        return ['', resource.name || '', name || '', resource.resource_type, resource.ts, this, {height:21}];
+    },
+
+    testAuth1 : function(btn, loaded, permission)
+    {
+        if (loaded!=true)
+        {
+            var user = BQSession.current_session.user_uri;
+            this.resource.testAuth(user, Ext.bind(this.testAuth1, this, [btn, true], 0));            
+        }
+        else
+        {
+            if (permission)
+                btn.operation.call(this, btn);
+            else
+                BQ.ui.attention('You do not have permission to perform this action!');
+        }
     },
     
     afterRenderFn : function()
@@ -210,10 +230,13 @@ Ext.define('Bisque.Resource',
 		el.on('contextmenu', this.onRightClick, this);
 		el.on('dblclick', Ext.Function.createSequence(this.preDblClick, this.onDblClick, this), this);
 		
+		/*
+		// dima: taps are really not needed: double should not be needed anymore with edit mode on the browser
+		// and single is being imitated as a click, otherwise we're getting multiple clicks...
 		if (this.browser.gestureMgr)
 			this.browser.gestureMgr.addListener(
 			[
-				{
+				{ 
 					dom: el.dom,
 					eventName: 'doubletap',
 					listener: Ext.bind(Ext.Function.createSequence(this.preDblClick, this.onDblClick, this), this), 
@@ -225,6 +248,7 @@ Ext.define('Bisque.Resource',
 					listener: Ext.bind(Ext.Function.createSequence(this.preClick, this.onClick, this), this), 
 				}
 			]);
+	   */
     },
 
     preClick : function()
@@ -265,19 +289,73 @@ Ext.define('Bisque.Resource',
     preMouseEnter : function()
     {
     	this.removeCls('LightShadow');
+    	
+    	if (this.browser.selectState == 'SELECT')
+    	{
+            if (!this.operationBar)
+            {
+                this.operationBar = Ext.create('Bisque.ResourceBrowser.OperationBar', {
+                    renderTo    :   this.getEl(),
+                    resourceCt  :   this,
+                    browser     :   this.browser
+                });
+    
+                this.operationBar.alignTo(this, "tr-tr");
+            }
+
+            this.operationBar.setVisible(true);
+        }
     },
+    
     preMouseLeave : function()
     {
+        if (this.browser.selectState == 'SELECT')
+            this.operationBar.setVisible(false);
+
 		if (!this.el.hasCls('resource-view-selected'))
 			this.addCls('LightShadow');
     },
 
-    onMouseEnter : Ext.emptyFn,
     onMouseMove : Ext.emptyFn,
+
+    onMouseEnter : Ext.emptyFn,
     onMouseLeave : Ext.emptyFn,
     onDblClick : Ext.emptyFn,
     onClick : Ext.emptyFn,
-    onRightClick : Ext.emptyFn
+    onRightClick : Ext.emptyFn,
+    
+
+    /* Resource operations */
+    shareResource : function()
+    {
+        var shareDialog = Ext.create('BQ.ShareDialog', {
+            resource    :   this.resource
+        });
+    },
+
+    downloadOriginal : function()
+    {
+        var exporter = Ext.create('BQ.Export.Panel');
+        exporter.downloadResource(this.resource, 'none');
+    },
+    
+    changePrivacy : function(permission, success, failure)
+    {
+        function loaded(resource, permission, success, failure)
+        {
+            if  (permission)
+                resource.permission = permission;
+            else
+                resource.permission = (this.resource.permission=='private')?'published':'private';
+            
+            resource.append(Ext.bind(success, this), Ext.bind(failure, this));
+        }
+        
+        BQFactory.request({
+            uri :   this.resource.uri + '?view=short',
+            cb  :   Ext.bind(loaded, this, [permission, success, failure], 1) 
+        });
+    }
 });
 
 Ext.define('Bisque.Resource.Compact', {
@@ -285,8 +363,78 @@ Ext.define('Bisque.Resource.Compact', {
 });
 
 Ext.define('Bisque.Resource.Card', {
-    extend:'Bisque.Resource'
+    extend:'Bisque.Resource',
+    
+    constructor : function()
+    {
+        Ext.apply(this,
+        {
+            layout : 'fit'
+        });
+        
+        this.callParent(arguments);
+    },
+    
+    prefetch : function(layoutMgr)
+    {
+        this.callParent(arguments);
+
+        if (!this.getData('fetched'))
+        {
+            this.setData('fetched', -1);    //Loading
+            BQFactory.load(this.resource.uri + '/tag', Ext.bind(this.loadResource, this));
+        }
+    },
+
+    loadResource : function(data)
+    {
+        this.resource.tags = data.tags;
+        var tag, tagProp, tagArr=[], tags = this.getSummaryTags();
+        
+        // Show preferred tags first
+        for (var i=0;i<this.resource.tags.length;i++)
+        {
+            tag = this.resource.tags[i];
+            tagProp = new Ext.grid.property.Property({
+                                                        name: tag.name,
+                                                        value: tag.value
+                                                    });
+            (tags[tag.name])?tagArr.unshift(tagProp):tagArr.push(tagProp);
+        }
+        
+        this.setData('tags', tagArr.slice(0, 7));
+        this.setData('fetched', 1); //Loaded
+
+        var renderedRef=this.getData('renderedRef')
+        if (renderedRef && !renderedRef.isDestroyed)
+            renderedRef.updateContainer();
+    },
+    
+    afterRenderFn : function()
+    {
+        this.setData('renderedRef', this);
+
+        if (this.getData('fetched')==1 && !this.isDestroyed)
+            this.updateContainer();
+    },
+    
+    getSummaryTags : function()
+    {
+        return {};
+    },
+
+    updateContainer : function()
+    {
+        var propsGrid=this.GetPropertyGrid({/*autoHeight:true}*/}, this.getData('tags'));
+        propsGrid.determineScrollbars=Ext.emptyFn;
+        
+        this.add([propsGrid]);
+        this.setLoading(false);
+    },
+    
+    onMouseMove : Ext.emptyFn,
 });
+
 
 Ext.define('Bisque.Resource.PStrip', {
     extend:'Bisque.Resource'
@@ -297,7 +445,58 @@ Ext.define('Bisque.Resource.PStripBig', {
 });
 
 Ext.define('Bisque.Resource.Full', {
-    extend:'Bisque.Resource'
+    extend:'Bisque.Resource',
+
+    constructor : function()
+    {
+        Ext.apply(this,
+        {
+            layout : 'fit'
+        });
+        
+        this.callParent(arguments);
+    },
+    
+    afterRenderFn : function()
+    {
+        this.setData('renderedRef', this);
+
+        if (this.getData('fetched')==1 && !this.isDestroyed)
+            this.updateContainer();
+    },
+    
+    prefetch : function(layoutMgr)
+    {
+        this.callParent(arguments);
+
+        if (!this.getData('fetched'))
+        {
+            this.setData('fetched', -1);    //Loading
+            BQFactory.load(this.resource.uri + '/tag?view=deep', Ext.bind(this.loadResource, this));
+        }
+    },
+
+    loadResource : function(data)
+    {
+        this.setData('tags', data.tags);
+        this.setData('fetched', 1); //Loaded
+
+        var renderedRef=this.getData('renderedRef')
+        if (renderedRef && !renderedRef.isDestroyed)
+            renderedRef.updateContainer();
+    },
+    
+    updateContainer : function()
+    {
+        var propsGrid=this.GetPropertyGrid({/*autoHeight:true}*/}, this.getData('tags'));
+        propsGrid.determineScrollbars=Ext.emptyFn;
+        
+        this.add([propsGrid]);
+        this.setLoading(false);
+    },
+
+    onMouseMove : Ext.emptyFn,
+
 });
 
 Ext.define('Bisque.Resource.List', {

@@ -34,7 +34,7 @@ BQ.ui = function(){
     var msgCt;
 
     function createBox(t, s, c){
-       return '<div class="msg '+c+'"><h3>' + t + '</h3><p>' + s + '</p></div>';
+       return '<div class="msg '+c+'"><img src="/images/cancel.png" /><h3>' + t + '</h3><p>' + s + '</p></div>';
     }
     return {
         message: function(title, format, delay, css) {
@@ -46,6 +46,14 @@ BQ.ui = function(){
             var s = Ext.String.format.apply(String, Array.prototype.slice.call(arguments, 1));
             var m = Ext.core.DomHelper.append(msgCt, createBox(title, s, css), true);
             m.hide();
+            m.on('click', function(){ 
+                    this.stopAnimation();
+                    //this.fadeOut( {remove: true} );
+                    this.destroy(); 
+                }, m, { 
+                single: true, 
+                stopEvent : true, 
+            });
             m.slideIn('t').ghost("t", { delay: delay, remove: true});
         },
 
@@ -83,6 +91,23 @@ BQ.ui = function(){
             });
             tip.show();
             setTimeout( function () { tip.destroy(); }, opts.timeout );
+        },
+
+        highlight: function( element, text, opts ) {
+            opts = opts || {};
+            opts.timeout = opts.timeout || 5000;  
+            opts.anchor = opts.anchor || 'top';    
+            
+            var w = Ext.create('Ext.ToolTip', Ext.apply({
+              target: element,
+              anchor: opts.anchor,
+              cls: 'highlight',
+              html: text,
+              autoHide: false,
+              shadow: false,
+            }, opts));
+            w.show();
+            w.getEl().fadeOut({ delay: opts.timeout});//.fadeOut({ delay: opts.timeout, remove: true});
         },
 
     };

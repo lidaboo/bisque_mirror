@@ -184,7 +184,6 @@ Viewstate.prototype.addParams = function (params) {
     }
     this.src_args.push (params);
 }
-
  
 Viewstate.prototype.image_url = function (auxparams) {
     var url = this.imagesrc;
@@ -305,7 +304,7 @@ function ImgViewer (parentid, image_or_uri, parameters) {
     this.submenu = null;
     this.image_or_uri = image_or_uri;
 
-    this.parameters = parameters || {};      
+    this.parameters = Ext.apply(parameters || {}, this.getAttributes());
 
     this.menudiv = document.createElementNS (xhtmlns, "div");
     this.menudiv.id =  "imgmenu";
@@ -314,20 +313,19 @@ function ImgViewer (parentid, image_or_uri, parameters) {
     this.imagediv = document.createElementNS (xhtmlns, "div");
     this.imagediv.id="imgviewer_image";
     this.imagediv.className = "image_viewer_display";
-
-/*
-    this.optiondiv = document.createElementNS (xhtmlns, "div");
-    this.optiondiv.id="imgviewer_option";
-    this.optiondiv.className = "image_viewer_option";
-*/
+    
+    this.preferences = undefined;
+    BQ.Preferences.get({
+        key : 'Viewer',
+        callback : Ext.bind(this.onPreferences, this),
+    });    
 
     this.target.appendChild (this.menudiv);
-    //this.target.appendChild (this.optiondiv);
     this.target.appendChild (this.imagediv);
     
-    //var plugin_list = "default,slicer,tiles,ops,download,movie,external,permissions,share,statistics,scalebar,progressbar,infobar,edit,renderer";
-    //var plugin_list = "default,slicer,tiles,ops,download,movie,external,permissions,share,scalebar,progressbar,infobar,edit,renderer";
-    var plugin_list = "default,slicer,tiles,ops,download,movie,external,scalebar,progressbar,infobar,edit,renderer";
+    this.toolbar = this.parameters.toolbar;  
+    
+    var plugin_list = "default,slicer,tiles,ops,download,movie,external,converter,scalebar,progressbar,infobar,edit,renderer";
     if ('onlyedit' in this.parameters)
         plugin_list = "default,slicer,tiles,ops,scalebar,progressbar,infobar,edit,renderer";
     if ('simpleview' in this.parameters) {
@@ -338,22 +336,18 @@ function ImgViewer (parentid, image_or_uri, parameters) {
     if (ImgViewer.pluginmap == null) 
         ImgViewer.pluginmap = {
             "default"     : DefaultImgPlugin,
-            //"scale"       : ImgScale,
-            //"download"    : ImgDownload,
             "movie"       : ImgMovie,
             "external"    : ImgExternal,                 
+            "converter"   : ImageConverter,                 
             "permissions" : ImgPermissions,
             "statistics"  : ImgStatistics,
             "scalebar"    : ImgScaleBar,
             "progressbar" : ProgressBar,            
             "infobar"     : ImgInfoBar,
             "slicer"      : ImgSlicer,
-            "share"       : ImgShare,
             "edit"        : ImgEdit,
-            //"scroller"    : ImgScroller,
             "tiles"       : TilesRenderer, // TILES RENDERER MUST BE BEFORE SVGRenderer  
-            "ops"         : ImgOperations, // Ops should be after slicer            
-            //"image"       : ImageRenderer, // IMAGE RENDERER MUST BE BEFORE SVGRenderer           
+            "ops"         : ImgOperations, // Ops should be after tiler            
             "renderer"    : SVGRenderer,   // RENDERER MUST BE LAST
         };
 
@@ -374,6 +368,18 @@ function ImgViewer (parentid, image_or_uri, parameters) {
 ImgViewer.prototype = new ViewerPlugin();
 ImgViewer.prototype.close = function (){
     history.back();
+}
+
+ImgViewer.prototype.getAttributes = function () {
+    var s = window.location.hash.replace(/^#/, '') || window.location.search.replace(/^\?/, '');
+    var attributes = {};    
+    var aa = s.split('&');
+    var a = undefined;
+    for (var i=0; a=aa[i]; ++i) {
+        var b = a.split('=', 2);
+        attributes[b[0]] =  decodeURIComponent(b[1]);
+    }
+    return attributes;
 }
 
 ImgViewer.prototype.onsession = function (session) {
@@ -443,6 +449,8 @@ XButtonGroup.prototype.selected = function (text, cb){
     if (cb) cb();
 }
 
+// DIMA: deprecated addCommand etc...
+
 ImgViewer.prototype.addCommandGroup = function (group, text, cb) {
     var bg = this.groups[group]; 
     if (bg == null) {
@@ -465,6 +473,15 @@ ImgViewer.prototype.remCommandGroup = function (group) {
         this.groups[group] = null;
     }
 }
+
+ImgViewer.prototype.addMenu = function (m) {
+    if (!this.toolbar) return;
+    var toolbar = this.toolbar;
+    var n = toolbar.items.getCount()-2;
+    toolbar.insert(n, m);  
+    toolbar.doLayout();
+}
+
 
 ImgViewer.prototype.addCommand =function (text, callback, helptext){
     var menu = this.menudiv;
@@ -593,20 +610,13 @@ ImgViewer.prototype.doUpdateImage = function () {
 }
 
 ImgViewer.prototype.updateImage = function () {
+    this.requires_update = undefined;
     if (this.update_needed) clearTimeout(this.update_needed);
     this.update_needed = setTimeout(callback(this, 'doUpdateImage'), this.update_delay_ms);
 }
 
 ImgViewer.prototype.findPlugin = function(name) {
-    p = null;
-    for (var i = 0; i < this.plugins.length; i++) {
-        plugin = this.plugins[i];
-        if (plugin.name == name) {
-          p = plugin;
-          break;
-        }        
-    }    
-    return p;
+    return this.plugins_by_name[name];
 }
 
 ImgViewer.prototype.gobjects = function() {
@@ -720,8 +730,11 @@ ImgViewer.prototype.newPhys = function (bqimagephys) {
         plugin.newImage ();
     }   
 
-
-    this.updateImage ();
+    //this.updateImage();
+    if (this.preferences)
+        this.updateImage();
+    else
+        this.requires_update = true;
 
     // Load gobjects from string and return
     if ('gobjects_xml' in this.parameters) {
@@ -733,6 +746,89 @@ ImgViewer.prototype.newPhys = function (bqimagephys) {
         this.loadGObjects(gobjects_url);
     }    
 
+}
+
+//----------------------------------------------------------------------
+// viewer preferences
+//----------------------------------------------------------------------
+
+ImgViewer.prototype.onPreferences = function(pref) {
+    this.preferences = Ext.apply(pref, this.parameters || {}); // local defines overwrite preferences
+    if (this.requires_update)
+        this.updateImage();   
+};
+
+//----------------------------------------------------------------------
+// view menu
+//----------------------------------------------------------------------
+
+ImgViewer.prototype.createCombo = function (label, items, def, scope, cb) {
+    var options = Ext.create('Ext.data.Store', {
+        fields: ['value', 'text'],
+        data : items
+    });
+    var combo = this.menu_view.add({
+        xtype: 'combobox',
+        fieldLabel: label,
+        store: options,
+        queryMode: 'local',
+        displayField: 'text',
+        valueField: 'value',
+        forceSelection: true,
+        editable: false,
+        value: def,
+        listeners:{
+            scope: scope,
+            'select': cb,
+        },
+    });    
+    return combo;
+}
+
+ImgViewer.prototype.createViewMenu = function() {
+    if (!this.menubutton) {
+        this.menubutton = document.createElement('span');
+        
+        // temp fix to work similar to panojs3, will be updated to media queries
+        if (isClientTouch())
+            this.menubutton.className = 'viewoptions viewoptions-touch';
+        else if (isClientPhone())
+            this.menubutton.className = 'viewoptions viewoptions-phone';
+        else                 
+            this.menubutton.className = 'viewoptions';            
+    }
+    
+    if (!this.menu_view) {
+        this.menu_view = Ext.create('Ext.tip.ToolTip', {
+            target: this.menubutton,
+            anchor: 'top',
+            anchorToTarget: true,
+            cls: 'bq-viewer-menu',
+            maxWidth: 470,
+            anchorOffset: -10,
+            autoHide: false,
+            shadow: false,
+            closable: true,
+            layout: {
+                type: 'vbox',
+                align: 'stretch',
+            },  
+            defaults: {
+                labelSeparator: '',
+                labelWidth: 200,
+            },    
+        }); 
+        var el = Ext.get(this.menubutton);
+        el.on('click', this.onMenuClick, this);        
+    }
+    return this.menu_view;  
+};
+
+ImgViewer.prototype.onMenuClick = function () {
+    if (this.menu_view.isVisible())
+        this.menu_view.hide();    
+    else
+        this.menu_view.show();
 }
 
 ////////////////////////////////////////////////

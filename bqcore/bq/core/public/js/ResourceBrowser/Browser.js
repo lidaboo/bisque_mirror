@@ -106,9 +106,13 @@ Ext.define('Bisque.ResourceBrowser.Dialog',
 
         if (selection.length)
             if (selection.length==1)
-                this.browser.fireEvent('Select', this, selection[0]);
+                this.browser.fireEvent('Select', this, selection[0].resource);
             else
-                this.browser.fireEvent('Select', this, selection);
+            {
+                for (var i=0, selectRes=[]; i<selection.length; i++)
+                    selectRes.push(selection[i].resource);
+                this.browser.fireEvent('Select', this, selectRes);
+            }
         else
             BQ.ui.message('Selection empty!', 'Please select an image or press cancel to abort.');
     },
@@ -131,6 +135,7 @@ Ext.define('Bisque.QueryBrowser.Dialog', {
 Ext.define('Bisque.ResourceBrowser.Browser',
 {
     extend : 'Ext.panel.Panel',
+    alias: 'widget.bq-resource-browser',
 
     constructor : function(config)
     {
@@ -200,7 +205,7 @@ Ext.define('Bisque.ResourceBrowser.Browser',
 
         this.loadPreferences();
 
-        if(Ext.supports.Touch)
+        if (Ext.supports.Touch)
             this.gestureMgr = new Bisque.Misc.GestureManager();
     },
 
@@ -241,9 +246,11 @@ Ext.define('Bisque.ResourceBrowser.Browser',
 
             if (this.browserParams.dataset!="None")
             {
+                var baseURL = (this.browserParams.dataset instanceof BQDataset)?this.browserParams.dataset.uri+'/value':this.browserParams.dataset;
+                
                 this.loadData(
                 {
-                    baseURL : this.browserParams.dataset,
+                    baseURL : baseURL,
                     offset : this.browserParams.offset,
                     tag_query : this.browserParams.tagQuery,
                     tag_order : this.browserParams.tagOrder
@@ -356,8 +363,8 @@ Ext.define('Bisque.ResourceBrowser.Browser',
                 if(this.uri[param].length == 0)
                     delete this.uri[param];
     
-            this.resourceQueue = new Bisque.ResourceBrowser.ResourceQueue(
-            {
+            this.resourceQueue = new Bisque.ResourceBrowser.ResourceQueue();
+            this.resourceQueue.init({
                 callBack : callback(this, 'dataLoaded'),
                 browser : this,
                 uri : this.uri
@@ -433,6 +440,25 @@ Ext.define('Bisque.ResourceBrowser.Browser',
         this.addEvents('Select');
         this.changeLayoutThrottled = Ext.Function.createThrottled(this.ChangeLayout, 400, this);
         this.centerPanel.on('resize', Ext.bind(this.ChangeLayout, this, [-1]));
+        
+        this.centerPanel.getEl().on('mousewheel', function(e)
+        {
+            if (this.layoutMgr.key!=Bisque.ResourceBrowser.LayoutFactory.LAYOUT_KEYS.Full)
+            {
+                if(e.getWheelDelta()>0)
+                {
+                    var btnLeft = this.commandBar.getComponent("btnLeft");
+                    if(!btnLeft.disabled)
+                        btnLeft.handler.call(btnLeft.scope, btnLeft);
+                }
+                else
+                {
+                    var btnRight = this.commandBar.getComponent("btnRight");
+                    if(!btnRight.disabled)
+                        btnRight.handler.call(btnRight.scope, btnRight);
+                }
+            }
+        }, this);
 
         Ext.create('Ext.util.KeyMap',
         {

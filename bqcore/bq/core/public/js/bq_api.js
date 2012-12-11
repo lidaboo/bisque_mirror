@@ -176,29 +176,26 @@ BQFactory.request = function(params) {
     if (! uri) {
         clog("ERROR: trying to load null uri");
     }
-    if (cache && uri in BQFactory.session) {
-        var o = BQFactory.session[uri];
-        if (o instanceof XMLHttpRequest) {
-            clog ("outstanding request");
-            if (cb) 
-                chainRequest(o, callback(BQFactory, 'loaded_callback', uri, cb));
-        } else {
-            //clog ("using cache result");
-            //if (cb) cb(o);
-            // Just redo the request
-            clog ('re-issuing cached result ' + uri);
-            BQFactory.session[uri] = xmlrequest(uri, callback(BQFactory, 'on_xmlresponse', params), method, xmldata, params.errorcb);
-        }
-    } else if (progresscb) {
-        BQFactory.session[uri] = 
-            xmlrequest(uri, callback(BQFactory, 'on_xmlresponse_progress', params), method, xmldata, params.errorcb);
-
-    } else {
+    // if (cache && uri in BQFactory.session) {
+    //     var o = BQFactory.session[uri];
+    //     if (o instanceof XMLHttpRequest) {
+    //         clog ("outstanding request");
+    //         if (cb) 
+    //             chainRequest(o, callback(BQFactory, 'loaded_callback', uri, cb));
+    //     } else {
+    //         //clog ("using cache result");
+    //         //if (cb) cb(o);
+    //         // Just redo the request
+    //         clog ('re-issuing cached result ' + uri);
+    //         BQFactory.session[uri] = xmlrequest(uri, callback(BQFactory, 'on_xmlresponse', params), method, xmldata, params.errorcb);
+    //     }
+    // } else {
         BQFactory.session[uri] = xmlrequest(uri, callback(BQFactory, 'on_xmlresponse', params), method, xmldata, params.errorcb);
-    }
+//}
 };
 
 BQFactory.loaded_callback = function (uri, cb, xmldoc) {
+    clog ("Loaded callback for " + uri);
     var o = BQFactory.session[uri];
     cb (o);
 };
@@ -226,51 +223,8 @@ BQFactory.on_xmlresponse = function(params, xmldoc) {
         if (errorcb) errorcb ({ xmldoc : xmldoc, message : 'parse error in BQFactory.on_xmlresponse' });
         return;
     }
-    return cb(bq);    
-}
-
-// <x:include xlink:href="http://ssks?offset=5&limit=5" />
-BQFactory.on_xmlresponse_progress = function (params, xmldoc) {
-    var uri = params.uri;
-    var cb  = params.cb;
-    var progresscb = params.progresscb;
-    var errorcb = params.errorcb;
-
-    clog('Response: ' + uri);
-    try {
-        var loaded = [];
-        var last = true;
-        var n = xmldoc.firstChild;
-        if (!n) return;
-        if (n.nodeName == "response") 
-        n = n.firstChild;
-        var bq = BQFactory.make (n.nodeName, uri);
-        bq.doc = bq;
-        BQFactory.session[uri] = bq;
-        if (n.nodeName == "resource") 
-        n  = n.firstChild;
-        while (n != null) {
-            var node = n;
-            n = node.nextSibling;
-            
-            if (node.name == 'include') {
-                xmlrequest (node.attributes['href'], 
-                            callback(BQFactory, 'on_xmlresponse_progress',
-                                     uri, cb, progresscb));
-                last = false;
-                continue;
-            }
-            // Must be node result
-            var o = BQFactory.createFromXml (node, null, bq);
-            loaded.push (o);
-            if (progresscb != null) 
-            progresscb(o);
-        }    
-        if (cb && last) cb(bq);
-    } catch (err) {
-        clog ("on_xmlresponse error" + err);
-        if (errorcb) errorcb ({ xmldoc : xmldoc, message : 'parse error in BQFactory.on_xmlresponse_progress' });
-    }
+    if (cb)
+        return cb(bq);    
 }
 
 BQFactory.parseBQDocument = function (xmltxt) {
@@ -447,7 +401,7 @@ BQObject.prototype.initializeXml = function (node) {
     
     // dima: speed optimization, using xpath for resources with many values is much faster
     var x = node.ownerDocument.evaluate('./value', node, null, XPathResult.ANY_TYPE, null);
-    var y = x.iterateNext();
+    var y = x.iterateNext(); 
     if (y) this.values = [];
     while (y) {
         this.values.push(new BQValue(y));
@@ -556,9 +510,12 @@ BQObject.prototype.rename = function(newName, cb, errorcb) {
     clog ('BQAPI: BQObject.prototype.rename - Not implemented');
 }
 
-BQObject.prototype.deleteTag = function(childTag) {
+BQObject.prototype.deleteTag = function(childTag, cb, errorcb) {
     if (childTag instanceof BQTag)
+    {
         this.remove(childTag);
+        childTag.delete_(cb, errorcb);
+    }
     else
         clog ('BQAPI: deleteTag - Input is not a BQTag.');
 }
@@ -1285,6 +1242,7 @@ function BQImagePhys(bqimage) {
     this.pixel_units = [];    
     this.channel_names = [];
     this.display_channels = [];
+    this.channel_colors = [];
 
     this.pixel_size_ds = [];
     this.channel_names_ds = [];
@@ -1294,6 +1252,23 @@ function BQImagePhys(bqimage) {
     this.channel_names_is = [];
     this.display_channels_is = [];
      
+    // default mapping
+    this.channel_colors_default = [
+        new Ext.draw.Color( 255,   0,   0 ), // red
+        new Ext.draw.Color(   0, 255,   0 ), // green
+        new Ext.draw.Color(   0,   0, 255 ), // blue
+        new Ext.draw.Color( 255, 255, 255 ), // gray
+        new Ext.draw.Color(   0, 255, 255 ), // cyan
+        new Ext.draw.Color( 255,   0, 255 ), // magenta
+        new Ext.draw.Color( 255, 255,   0 ), // yellow
+    ];   
+    
+    this.pixel_formats = {
+        'unsigned integer': 'u',
+        'signed integer'  : 's',
+        'floating point'  : 'f',
+    };
+    
     this.is_done = false;
     this.ds_done = false; 
     this.loadcallback = null;
@@ -1322,10 +1297,17 @@ BQImagePhys.prototype.init = function () {
   if (this.num_channels == 2)
     this.display_channels[2] = -1;
 
+
+    this.channel_colors = this.channel_colors_default.slice(0, Math.min(this.num_channels, this.channel_colors_default.length));
+    var diff = this.num_channels-this.channel_colors.length;
+    for (var i=0; i<diff; i++)
+        this.channel_colors.push(new Ext.draw.Color(0,0,0));
+
+
   //-------------------------------------------------------
-  // image channels to display RGB mapping  
+  // channel names
   for (var i=0; i<this.num_channels; i++)
-    this.channel_names[i] = i+1; 
+    this.channel_names[i] = 'Ch'+(i+1); 
   if (this.num_channels == 3) {
     this.channel_names[0] = 'Red';
     this.channel_names[1] = 'Green';
@@ -1357,6 +1339,10 @@ BQImagePhys.prototype.normalizeMeta = function() {
     this.display_channels[i] = combineValue( this.display_channels_ds[i], this.display_channels_is[i], this.display_channels[i] );      
     this.display_channels[i] = parseInt( this.display_channels[i] );      
   }
+  
+  if (this.channel_colors_ds && this.channel_colors_ds.length===this.num_channels)
+      this.channel_colors = this.channel_colors_ds;
+  
   this.initialized = true;  
 }
 
@@ -1414,7 +1400,11 @@ BQImagePhys.prototype.onloadIS = function (image) {
   this.display_channels_is[0] = hash['display_channel_red'];      
   this.display_channels_is[1] = hash['display_channel_green'];      
   this.display_channels_is[2] = hash['display_channel_blue'];  
-  
+
+  for (var i=0; i<this.num_channels; i++)
+     if (hash['channel_color_'+i])
+         this.channel_colors[i] = Ext.draw.Color.fromString('rgb('+hash['channel_color_'+i]+')');
+    
   //-------------------------------------------------------
   // image channels to display RGB mapping  
   for (var i=0; i<this.num_channels; i++) {
@@ -1425,10 +1415,11 @@ BQImagePhys.prototype.onloadIS = function (image) {
   //-------------------------------------------------------
   // additional info
   this.pixel_depth = hash['image_pixel_depth'];     
-  
+  this.pixel_format = hash['image_pixel_format']; 
+    
   //-------------------------------------------------------
   // additional info
-  this.pixel_depth = hash['image_pixel_depth'];     
+  //this.pixel_depth = hash['image_pixel_depth'];     
   
   this.is_done = true; 
   this.onload();
@@ -1474,6 +1465,11 @@ BQImagePhys.prototype.onloadDS = function ( ) {
     this.display_channels_ds[0] = ht['display_channel_red'];
     this.display_channels_ds[1] = ht['display_channel_green'];     
     this.display_channels_ds[2] = ht['display_channel_blue'];
+    
+    this.channel_colors_ds = [];
+    for (var i=0; i<this.num_channels; i++)
+        if (ht['channel_color_'+i])
+            this.channel_colors_ds[i] = Ext.draw.Color.fromString('rgb('+ht['channel_color_'+i]+')');    
     
     //-------------------------------------------------------
     // image channels to display RGB mapping  
@@ -1577,10 +1573,11 @@ BQUser.prototype.afterInitialized = function () {
 }
 
 BQUser.prototype.get_credentials = function( cb) {
-    var u = new BQUrl(this.uri);
-    this.server_uri = u.server();
-    BQFactory.load (this.server_uri+bq.url("/auth_service/credentials/"), 
-                    callback (this, 'on_credentials', cb))
+//    var u = new BQUrl(this.uri);
+//    this.server_uri = u.server();
+//    BQFactory.load (this.server_uri+bq.url("/auth_service/credentials/"), 
+//                    callback (this, 'on_credentials', cb));
+    BQFactory.load (bq.url('/auth_service/credentials/'));
 }
 
 BQUser.prototype.on_credentials = function(cb, cred) {
@@ -1612,6 +1609,10 @@ BQAuth.prototype.initializeXml = function (node) {
     this.user   = attribStr(node, 'user');
 }
 
+BQAuth.prototype.save_ = function (node)
+{
+    debugger;
+}
 
 //-------------------------------------------------------------------------------
 // BQModule
@@ -1835,10 +1836,22 @@ BQDataset.prototype.getMembers = function (cb) {
     }
     */
     // we need to make sure we fetched values before we can do this properly
-    this.values = this.values || [];
-    
-    if (cb) cb(this);
+    //this.values = this.values || [];
+
+    if (!this.values) {
+        BQFactory.request({ 
+            uri: this.uri + '/value',  
+            cb: callback(this, '_loaded', cb),
+            uri_params: {view:'deep'}
+        });
+    } else {
+        if (cb) cb(this);
+    }
     return this;    
+}
+BQDataset.prototype._loaded = function (cb, resource) {
+    this.values = resource.children || [];
+    if (cb) cb(this);
 }
 
 BQDataset.prototype.setMembers = function (nvs) {
@@ -1853,6 +1866,76 @@ BQDataset.prototype.appendMembersResp = function (newmembers, cb, members_tag) {
     this.setMembers (members);
     if (cb) cb();
 }
+
+// deleteMembers    : Deletes members of a temporary dataset (which hasn't been saved, hence no URI)
+//                  : Calls individual deletes on the resources and collects results
+// output           : callback is called with an object summary which has two members, success and failure e.g.
+//                  : summary : {success:7, failure:3} 
+// temporary until we come up with a permanent (backend?) solution
+
+BQDataset.prototype.tmp_deleteMembers = function(cb)
+{
+    Ext.apply(this,
+    {
+        tmp_cb      :   cb,
+        tmp_success :   0,
+        tmp_failure :   0,
+        tmp_final   :   this.tmp_members.length
+    })
+    
+    function result(success)
+    {
+        success?this.tmp_success++:this.tmp_failure++;
+        
+        if ((this.tmp_success+this.tmp_failure)==this.tmp_final)
+            cb({success:this.tmp_success, failure:this.tmp_failure});
+    }
+    
+    for (var i=0; i<this.tmp_members.length; i++)
+        this.tmp_members[i].resource.delete_(Ext.pass(result, [true], this), Ext.pass(result, [false], this));
+}
+
+// method for a temporary dataset to set new members
+// assumes members are BQResources for now
+BQDataset.prototype.tmp_setMembers = function(members)
+{
+    if (!(members instanceof Array))
+        members = [members];
+    
+    this.tmp_members = members;
+}
+
+// method for a temporary dataset to download all member resources into one TARball
+BQDataset.prototype.tmp_downloadMembers = function()
+{
+    var exporter = Ext.create('BQ.Export.Panel'), members=[];
+    
+    for (var i=0; i<this.tmp_members.length; i++)
+        members.push(this.tmp_members[i].resource);
+        
+    exporter.downloadResource(members, 'tar');
+}
+
+// method for a temporary dataset to change permission on all member resources
+BQDataset.prototype.tmp_changePermission = function(permission, success, failure)
+{
+    var no = {count:this.tmp_members.length};
+    
+    function result(no, success)
+    {
+        if (--no.count==0) success(); 
+    }
+    
+    for (var i=0; i<this.tmp_members.length; i++)
+        this.tmp_members[i].changePrivacy(permission, Ext.pass(result, [no, success]));
+}
+
+// method for a temporary dataset to share all member resources
+BQDataset.prototype.tmp_shareMembers = function()
+{
+    var exporter = Ext.create('BQ.ShareDialog.Offline', {resources : this.tmp_members});
+}
+
 
 
 //-------------------------------------------------------------------------------

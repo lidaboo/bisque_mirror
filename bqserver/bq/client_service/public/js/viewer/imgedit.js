@@ -212,9 +212,20 @@ ImgEdit.prototype.dochange = function () {
 ImgEdit.prototype.save_edit = function (mode) {
 
     this.endEdit();
-    //alert('saving ' + this.gobjects.length + ' gobjects');	
+    //alert('saving ' + this.gobjects.length + ' gobjects');
+    
+    function findDirty(gobjects)
+    {
+        var dirty = [];
+        
+        for (var i=0; i<gobjects.length; i++)
+            if (gobjects[i].dirty)
+                dirty.push(gobjects[i]);
+        
+        return dirty;
+    }
 
-    this.viewer.image.gobjects = this.gobjects;
+    this.viewer.image.gobjects = this.viewer.image.gobjects.concat(findDirty(this.gobjects));
     this.viewer.image.save_gobjects();
 }
 
@@ -233,9 +244,11 @@ ImgEdit.prototype.keyhandler = function (e) {
 }
 ImgEdit.prototype.delete_item =  function (e){
     var r = this.viewer.renderer;
+    var found = false;
     for (var gi = 0; gi < this.gobjects.length; gi++) {
         var gob = this.gobjects[gi];
         if (r.is_selected(gob)) {
+            found = true;
             if (gob.uri != null 
                 && !confirm( "This graphical annotation is registered in the Database.\n  Really Delete?"))   return;
             r.hideShape (this.viewer.current_view, gob);
@@ -245,6 +258,7 @@ ImgEdit.prototype.delete_item =  function (e){
             this.tageditor = null;
         }
     }
+    if (!found) confirm("You must select an object to delete");
     this.dochange();
 }
 

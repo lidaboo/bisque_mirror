@@ -1,5 +1,5 @@
 .msg .x-box-mc {
-    font-size:14px;
+    font-size: 12px;
 }
 
 #messagepopup {
@@ -28,6 +28,14 @@
 
 #messagepopup .msg p {
     margin: 0;
+    overflow: auto; 
+    font-size: 12px;       
+}
+
+#messagepopup .msg img {
+    float: right;
+    width: 20px;
+    opacity: 0.7;
 }
 
 #messagepopup .warning {
@@ -65,3 +73,22 @@
 #messagepopup .notification h3 {
     font-size: 20px;
 }
+
+
+
+.highlight {
+    background-color: rgba(255,255,255,0.6);
+    border-width: 0px;
+    padding: 10px;
+    text-align:center;
+}
+
+.highlight .x-tip-anchor-top {
+    border-bottom-color: rgba(255,255,255,0.6);
+}
+
+.highlight h3 {
+    color: #000000;
+    font-size: 2em;
+}
+

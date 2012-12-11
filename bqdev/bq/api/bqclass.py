@@ -106,7 +106,7 @@ class BQNode (object):
 class BQResource (BQNode):
     '''Base class for Bisque resources'''
     xmltag = 'resource'
-    xmlfields = ['name', 'value', 'type', 'uri', 'ts']
+    xmlfields = ['name', 'value', 'type', 'uri', 'ts', 'resource_uniq']
     xmlkids = ['kids', 'tags', 'gobjects']
 
     def __repr__(self):
@@ -131,6 +131,8 @@ class BQResource (BQNode):
         if tag is None:
             tag = BQTag(name, value)
         self.tags.append(tag)
+        return tag
+    
     def addGObject(self, name='', value='', gob=None):
         if gob is None:
             gob = BQGObject(name, value)

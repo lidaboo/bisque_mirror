@@ -47,11 +47,13 @@ import bioformats
 
 log = logging.getLogger('bq.image_service.server')
 
+default_format = 'bigtiff'
+
 imgsrv_thumbnail_cmd = config.get('bisque.image_service.thumbnail_command', '-depth 8,d -page 1 -display')
 imgsrv_default_cmd = config.get('bisque.image_service.default_command', '-depth 8,d')
 
-imgcnv_needed_version = '1.51'
-bioformats_needed_version = '4.3.0'
+imgcnv_needed_version = '1.54.2' # dima: upcoming 1.54
+bioformats_needed_version = '4.3.0' # dima: upcoming 4.4.4
 
 # ImageServer
 #
@@ -85,7 +87,8 @@ G = M *1000
 def getQuery4Url(url):
     scheme, netloc, url, params, querystring, fragment = urlparse(url)
 
-    pairs = [s2 for s1 in querystring.split('&') for s2 in s1.split(';')]
+    #pairs = [s2 for s1 in querystring.split('&') for s2 in s1.split(';')]
+    pairs = [s1 for s1 in querystring.split('&')]
     query = []
     for name_value in pairs:
         if not name_value:
@@ -363,9 +366,9 @@ class InfoService(object):
 
         info = self.server.getImageInfo(id=image_id)
 
-        response = etree.Element ('response')
-        image    = etree.SubElement (response, 'image')
-        image.attrib['src'] = '/imgsrv/' + str(image_id)
+        #response = etree.Element ('response')
+        image    = etree.Element ('resource')
+        image.attrib['uri'] = '%s/%s' % (self.server.url,  image_id)
         for k, v in info.iteritems():
             tag = etree.SubElement(image, 'tag')
             tag.attrib['name'] = str(k)
@@ -380,7 +383,7 @@ class InfoService(object):
             tag.attrib['type'] = 'string'
             tag.attrib['value'] = fileName
 
-        data_token.setXml(etree.tostring(response))
+        data_token.setXml(etree.tostring(image))
         return data_token
 
 class DimService(object):
@@ -430,7 +433,7 @@ class MetaService(object):
             if os.path.exists(ifile):
                 info = imgcnv.meta(ifile)
             else:
-                info['format']      = 'TIFF'
+                info['format']      = default_format
                 info['pixel_resolution_x'] = str( '0.0' )
                 info['pixel_resolution_y'] = str( '0.0' )
                 info['pixel_resolution_z'] = str( '0.0' )
@@ -447,11 +450,11 @@ class MetaService(object):
                 if 'depth'    in info2: info['image_pixel_depth'] = str( info2['depth'] )
                 info['image_num_p'] = str( int(info2['tsize']) * int(info2['zsize']) )
 
-            response = etree.Element ('response')
-            response.set('uri', '%s/%s?meta'%(self.server.url, image_id))
-            response.set('src', '%s/%s'%(self.server.url, image_id))
-            image    = etree.SubElement (response, 'image')
-            image.set('src', '%s/%s'%(self.server.url, image_id))
+            #response = etree.Element ('response')
+            #response.set('uri', '%s/%s?meta'%(self.server.url, image_id))
+            #response.set('src', '%s/%s'%(self.server.url, image_id))
+            image    = etree.Element ('resource')
+            #image.set('src', '%s/%s'%(self.server.url, image_id))
             image.set('uri', '%s/%s?meta'%(self.server.url, image_id))
             planes = None
 
@@ -485,7 +488,7 @@ class MetaService(object):
                     pass
 
             log.debug("MetaService: storing metadata into " + str(metacache))
-            xmlstr = etree.tostring(response)
+            xmlstr = etree.tostring(image)
             f = open(metacache, "w")
             try:
                 f.write(xmlstr)
@@ -670,7 +673,7 @@ class SliceService(object):
                 params = params + ' -roi %s,%s,%s,%s' % (x1s,y1s,x2s,y2s)
 
             log.debug( 'Slice service params: '+params )
-            imgcnv.convert(ifname, ofname, fmt='tiff', extra=params )
+            imgcnv.convert(ifname, ofname, fmt=default_format, extra=params )
 
         try:
             new_num_z = z2 - z1 + 1;
@@ -682,11 +685,11 @@ class SliceService(object):
             data_token.dims['pages']  = str(new_num_z*new_num_t)
             if new_w>0: data_token.dims['width']  = str(new_w)
             if new_h>0: data_token.dims['height'] = str(new_h)
-            data_token.dims['format'] = 'TIFF'
+            data_token.dims['format'] = default_format
         finally:
             pass
 
-        data_token.setImage(ofname, format='tiff')
+        data_token.setImage(ofname, format=default_format)
         return data_token
 
 
@@ -716,7 +719,7 @@ class FormatService(object):
     def action(self, image_id, data_token, arg):
 
         arg = arg.lower()
-        fmt = 'tiff'
+        fmt = default_format
         stream = False
         args = arg.split(',')
         if len(args)>0:
@@ -738,7 +741,7 @@ class FormatService(object):
 
             # avoid doing anything if requested format is tiff and input file is already tiff
             # Altough this might give us back one of the proprietary tiff-based images, in that case, recode
-            if (fmt == 'tiff' or fmt == 'tif') and self.server.fileIsTIFF(filename=ifile, data_token=data_token) and (ifile != self.server.imagepath(image_id)):
+            if (fmt == default_format or fmt == 'tif') and self.server.fileIsTIFF(filename=ifile, data_token=data_token) and (ifile != self.server.imagepath(image_id)):
                 log.debug('Result is standard TIFF, avoid reconvert')
                 ofile = ifile
 
@@ -842,17 +845,17 @@ class ResizeService(object):
 
         if not os.path.exists(ofile):
             size_arg = '-resize '+str(size[0])+','+str(size[1])+','+method+aspectRatio
-            imgcnv.convert( ifile, ofile, fmt='tiff', extra='-multi '+size_arg)
+            imgcnv.convert( ifile, ofile, fmt=default_format, extra='-multi '+size_arg)
 
         try:
             info = self.server.getImageInfo(filename=ofile)
             if 'width' in info:  data_token.dims['width']  = str(info['width'])
             if 'height' in info: data_token.dims['height'] = str(info['height'])
-            data_token.dims['format'] = 'TIFF'
+            data_token.dims['format'] = default_format
         finally:
             pass
 
-        data_token.setImage(ofile, format='tiff')
+        data_token.setImage(ofile, format=default_format)
         return data_token
 
 class ThumbnailService(object):
@@ -975,12 +978,12 @@ class DefaultService(object):
                     chan_g = self.getTagValueInt( image, 'display_channel_green', -1)
                     chan_b = self.getTagValueInt( image, 'display_channel_blue', -1)
 
-                imgcnv.convert( ifile, ofile, fmt='tiff', extra=imgsrv_default_cmd+' -remap %d,%d,%d'%(chan_r+1, chan_g+1, chan_b+1) )
+                imgcnv.convert( ifile, ofile, fmt=default_format, extra=imgsrv_default_cmd+' -remap %d,%d,%d'%(chan_r+1, chan_g+1, chan_b+1) )
             except:
-                imgcnv.convert( ifile, ofile, fmt='tiff', extra=imgsrv_default_cmd+' -display ')
+                imgcnv.convert( ifile, ofile, fmt=default_format, extra=imgsrv_default_cmd+' -display ')
 
-        data_token.dims['format'] = 'TIFF'
-        data_token.setImage(fname=ofile, format='tiff')
+        data_token.dims['format'] = default_format
+        data_token.setImage(fname=ofile, format=default_format)
         return data_token
 
 class RoiService(object):
@@ -1019,17 +1022,17 @@ class RoiService(object):
 
         if not os.path.exists(ofile):
             params = ' -roi %d,%d,%d,%d' % (x1-1,y1-1,x2-1,y2-1)
-            imgcnv.convert( ifile, ofile, fmt='tiff', extra='-multi '+params)
+            imgcnv.convert( ifile, ofile, fmt=default_format, extra='-multi '+params)
 
         try:
             info = self.server.getImageInfo(filename=ofile)
             if 'width' in info:  data_token.dims['width']  = str(info['width'])
             if 'height' in info: data_token.dims['height'] = str(info['height'])
-            data_token.dims['format'] = 'TIFF'
+            data_token.dims['format'] = default_format
         finally:
             pass
 
-        data_token.setImage(ofile, format='tiff')
+        data_token.setImage(ofile, format=default_format)
         return data_token
 
 class RemapService(object):
@@ -1060,65 +1063,134 @@ class RemapService(object):
             arg = '-multi -remap '+arg
 
         if not os.path.exists(ofile):
-            imgcnv.convert(ifile, ofile, fmt='tiff', extra=arg)
+            imgcnv.convert(ifile, ofile, fmt=default_format, extra=arg)
 
         try:
             info = self.server.getImageInfo(filename=ofile)
             if 'channels' in info: data_token.dims['channels'] = str(info['channels'])
-            data_token.dims['format'] = 'TIFF'
+            data_token.dims['format'] = default_format
         finally:
             pass
 
-        data_token.setImage(fname=ofile, format='tiff')
+        data_token.setImage(fname=ofile, format=default_format)
         return data_token
+        
+class FuseService(object):
+    """Provide an RGB image with the requested channel fusion
+       arg = W1R,W1G,W1B;W2R,W2G,W2B;W3R,W3G,W3B;W4R,W4G,W4B
+       output image will be constructed from channels 1 to n from input image mapped to RGB components with desired weights
+       fuse=display will use preferred mapping found in file's metadata
+       ex: fuse=255,0,0;0,255,0;0,0,255;255,255,255:A"""
+    def __init__(self, server):
+        self.server = server
+    def __repr__(self):
+        return 'FuseService: Returns an RGB image with the requested channel fusion, arg = W1R,W1G,W1B;W2R,W2G,W2B;...[:METHOD]'
+
+    def hookInsert(self, data_token, image_id, hookpoint='post'):
+        pass
+    def action(self, image_id, data_token, arg):
+        method = 'a'
+        arg = arg.lower()
+        if ':' in arg:
+            (arg, method) = arg.split(':', 1)
+        argenc = ''.join([hex(int(i)).replace('0x', '') for i in arg.replace(';', ',').split(',') if i is not ''])
+        
+        ifile = self.server.getInFileName( data_token, image_id )
+        ofile = self.server.getOutFileName( ifile, '.fuse_%s'%(argenc) )
+        log.debug('Fuse service: %s to %s with [%s:%s]'%(ifile, ofile, arg, method))
+
+        if arg == 'display':
+            arg = '-multi -fusemeta'
+        else:
+            arg = '-multi -fusergb %s'%(arg)
+            
+        if method != 'a':
+            arg += ' -fusemethod %s'%(method)
+            ofile += '_%s'%(method)
+            
+        if data_token.histogram is not None:
+            arg += ' -ihst %s'%(data_token.histogram)            
+
+        if not os.path.exists(ofile):
+            imgcnv.convert(ifile, ofile, fmt=default_format, extra=arg)
+
+        try:
+            info = self.server.getImageInfo(filename=ofile)
+            if 'channels' in info: data_token.dims['channels'] = str(info['channels'])
+            data_token.dims['format'] = default_format
+        finally:
+            pass
+
+        data_token.setImage(fname=ofile, format=default_format)
+        #data_token.histogram = None # fusion ideally should not be changing image histogram
+        return data_token        
 
 class DepthService(object):
     '''Provide an image with converted depth per pixel:
-       arg = depth,method
+       arg = depth,method[,format]
        depth is in bits per pixel
        method is: f or d or t or e
          f - full range
          d - data range
          t - data range with tolerance
          e - equalized
+       format is: u, s or f, if unset keeps image original
+         u - unsigned integer
+         s - signed integer
+         f - floating point
        ex: depth=8,d'''
     def __init__(self, server):
         self.server = server
     def __repr__(self):
-        return 'DepthService: Returns an Image with converted depth per pixel, arg = depth,method'
+        return 'DepthService: Returns an Image with converted depth per pixel, arg = depth,method[,format]'
     def hookInsert(self, data_token, image_id, hookpoint='post'):
         pass
     def action(self, image_id, data_token, arg):
         ms = 'f|F|d|D|t|T|e|E'.split('|')
         ds = '8|16|32|64'.split('|')
-        d,m = arg.split(',', 1)
+        fs = ['u', 's', 'f']
+        f=None
+        try: 
+            d,m,f = arg.lower().split(',', 2)
+        except ValueError:
+            d,m = arg.lower().split(',', 1)
 
         if not d in ds:
-            raise IllegalOperation('Depth service: depth is unsupported' )
+            raise IllegalOperation('Depth service: depth is unsupported: %s'%d )
 
         if not m in ms:
-            raise IllegalOperation('Depth service: method is unsupported' )
+            raise IllegalOperation('Depth service: method is unsupported: %s'%m )
+
+        if f is not None and f not in fs:
+            raise IllegalOperation('Depth service: format is unsupported: %s'%f )
+
 
         ifile = self.server.getInFileName(data_token, image_id)
         ofile = self.server.getOutFileName(ifile, '.depth_' + arg)
         log.debug('Depth service: ' + ifile + ' to '+ ofile +' with [' + arg + ']')
+        
+        if data_token.histogram is not None:
+            ohist = self.server.getOutFileName(ifile, '.histogram_depth_' + arg)
 
         if not os.path.exists(ofile):
             extra='-multi -depth '+arg
-            if not data_token.histogram is None:
-                extra += ' -ihst %s'%(data_token.histogram)
-            imgcnv.convert(ifile, ofile, fmt='tiff', extra=extra)
+            if data_token.histogram is not None:
+                extra += ' -ihst %s -ohst %s'%(data_token.histogram, ohist)
+            imgcnv.convert(ifile, ofile, fmt=default_format, extra=extra)
 
         try:
             info = self.server.getImageInfo(filename=ofile)
             if 'depth'     in info: data_token.dims['depth']     = str(info['depth'])
             if 'pixelType' in info: data_token.dims['pixelType'] = str(info['pixelType'])
-            data_token.dims['format'] = 'TIFF'
+            data_token.dims['format'] = default_format
         finally:
             pass
 
-        data_token.setImage(fname=ofile, format='tiff')
-        data_token.histogram = None
+        data_token.setImage(fname=ofile, format=default_format)
+        if data_token.histogram is not None:
+            data_token.histogram = ohist                    
+        #else:
+        #    data_token.histogram = None
         return data_token
 
 
@@ -1178,7 +1250,7 @@ class TileService(object):
                 if l.locked:
                     params = '-tile %d -ohst %s' % (tsz, hist_name)
                     log.debug('Generate tiles: from %s to %s with %s' % (ifname, tiles_name, params) )
-                    imgcnv.convert(ifname, tiles_name, fmt='tiff', extra=params )
+                    imgcnv.convert(ifname, tiles_name, fmt=default_format, extra=params )
                 else:
                     log.debug('IS locking failed for %s'%(hist_name) )
 
@@ -1193,11 +1265,13 @@ class TileService(object):
                 data_token.dims['pages'] = '1'
                 data_token.dims['zsize'] = '1'
                 data_token.dims['tsize'] = '1'
+                data_token.setImage(ofname, format=default_format)
+                data_token.histogram = hist_name                
             finally:
                 pass
+        else:
+            data_token.setHtmlErrorNotFound()
 
-        data_token.setImage(ofname, format='tiff')
-        data_token.histogram = hist_name
         return data_token
 
 
@@ -1222,14 +1296,14 @@ class ProjectMaxService(object):
         log.debug('ProjectMax service: ' + ifile + ' to '+ ofile )
 
         if not os.path.exists(ofile):
-            imgcnv.convert(ifile, ofile, fmt='tiff', extra=' -projectmax')
+            imgcnv.convert(ifile, ofile, fmt=default_format, extra=' -projectmax')
 
         data_token.dims['pages']  = '1'
         data_token.dims['zsize']  = '1'
         data_token.dims['tsize']  = '1'
-        data_token.dims['format'] = 'TIFF'
+        data_token.dims['format'] = default_format
 
-        data_token.setImage(fname=ofile, format='tiff')
+        data_token.setImage(fname=ofile, format=default_format)
         return data_token
 
 class ProjectMinService(object):
@@ -1248,14 +1322,14 @@ class ProjectMinService(object):
         log.debug('ProjectMin service: ' + ifile + ' to '+ ofile )
 
         if not os.path.exists(ofile):
-            imgcnv.convert(ifile, ofile, fmt='tiff', extra=' -projectmin')
+            imgcnv.convert(ifile, ofile, fmt=default_format, extra=' -projectmin')
 
         data_token.dims['pages']  = '1'
         data_token.dims['zsize']  = '1'
         data_token.dims['tsize']  = '1'
-        data_token.dims['format'] = 'TIFF'
+        data_token.dims['format'] = default_format
 
-        data_token.setImage(fname=ofile, format='tiff')
+        data_token.setImage(fname=ofile, format=default_format)
         return data_token
 
 class NegativeService(object):
@@ -1274,10 +1348,10 @@ class NegativeService(object):
         log.debug('NegativeService service: ' + ifile + ' to '+ ofile )
 
         if not os.path.exists(ofile):
-            imgcnv.convert(ifile, ofile, fmt='tiff', extra=' -negative -multi')
+            imgcnv.convert(ifile, ofile, fmt=default_format, extra=' -negative -multi')
 
-        data_token.dims['format'] = 'TIFF'
-        data_token.setImage(fname=ofile, format='tiff')
+        data_token.dims['format'] = default_format
+        data_token.setImage(fname=ofile, format=default_format)
         return data_token
 
 class SampleFramesService(object):
@@ -1300,18 +1374,18 @@ class SampleFramesService(object):
         log.debug('SampleFramesService: ' + ifile + ' to '+ ofile +' with [' + arg + ']')
 
         if not os.path.exists(ofile):
-            imgcnv.convert(ifile, ofile, fmt='tiff', extra='-multi -sampleframes '+arg)
+            imgcnv.convert(ifile, ofile, fmt=default_format, extra='-multi -sampleframes '+arg)
 
         try:
             info = self.server.getImageInfo(filename=ofile)
             if 'pages' in info: data_token.dims['pages']  = str(info['pages'])
             data_token.dims['zsize']  = '1'
             data_token.dims['tsize']  = data_token.dims['pages']
-            data_token.dims['format'] = 'TIFF'
+            data_token.dims['format'] = default_format
         finally:
             pass
 
-        data_token.setImage(fname=ofile, format='tiff')
+        data_token.setImage(fname=ofile, format=default_format)
         return data_token
 
 class FramesService(object):
@@ -1334,18 +1408,18 @@ class FramesService(object):
         log.debug('FramesService: ' + ifile + ' to '+ ofile +' with [' + arg + ']')
 
         if not os.path.exists(ofile):
-            imgcnv.convert(ifile, ofile, fmt='tiff', extra='-multi -page '+arg)
+            imgcnv.convert(ifile, ofile, fmt=default_format, extra='-multi -page '+arg)
 
         try:
             info = self.server.getImageInfo(filename=ofile)
             if 'pages' in info: data_token.dims['pages']  = str(info['pages'])
             data_token.dims['zsize']  = '1'
             data_token.dims['tsize']  = '1'
-            data_token.dims['format'] = 'TIFF'
+            data_token.dims['format'] = default_format
         finally:
             pass
 
-        data_token.setImage(fname=ofile, format='tiff')
+        data_token.setImage(fname=ofile, format=default_format)
         return data_token
 
 class RotateService(object):
@@ -1387,17 +1461,17 @@ class RotateService(object):
                 return data_token
 
             params = '-rotate %d' % (ang)
-            imgcnv.convert( ifile, ofile, fmt='tiff', extra='-multi '+params)
+            imgcnv.convert( ifile, ofile, fmt=default_format, extra='-multi '+params)
 
         try:
             info = self.server.getImageInfo(filename=ofile)
             if 'width' in info:  data_token.dims['width']  = str(info['width'])
             if 'height' in info: data_token.dims['height'] = str(info['height'])
-            data_token.dims['format'] = 'TIFF'
+            data_token.dims['format'] = default_format
         finally:
             pass
 
-        data_token.setImage(ofile, format='tiff')
+        data_token.setImage(ofile, format=default_format)
         return data_token
 
 ################################################################################
@@ -1444,7 +1518,7 @@ class BioFormatsService(object):
 
         if bfinfo is None: bfinfo = self.server.getImageInfo(id=image_id)
         data_token.dims = bfinfo
-        data_token.setImage(ofile, format='tiff')
+        data_token.setImage(ofile, format=default_format)
         return data_token
 
 class UriService(object):
@@ -1482,7 +1556,7 @@ class UriService(object):
 
         data_token.setFile( ofile )
         data_token.outFileName = url_filename
-        #data_token.setImage(fname=ofile, format='tiff')
+        #data_token.setImage(fname=ofile, format=default_format)
 
         if not imgcnv.supported(ofile):
             #data_token.setHtml('URI service: Downloaded file is not in supported image format...')
@@ -1550,7 +1624,7 @@ class MaskService(object):
 #            im = PILImage.blend(im, im_mask, 0.5 )
 #            im.save(ofname, "TIFF")
 #
-#        data_token.setImage(fname=ofname, format='tiff')
+#        data_token.setImage(fname=ofname, format=default_format)
         return data_token
 
 ################################################################################
@@ -1611,7 +1685,7 @@ class CreateImageService(object):
 
         for zi in range(z):
             for ti in range(t):
-                imgcnv.convert(ifname, ofname+'0-0,0-0,%d-%d,%d-%d'%(zi,zi,ti,ti), fmt='tiff', extra='-create '+creastr )
+                imgcnv.convert(ifname, ofname+'0-0,0-0,%d-%d,%d-%d'%(zi,zi,ti,ti), fmt=default_format, extra='-create '+creastr )
 
         return data_token
 
@@ -1680,9 +1754,9 @@ class SetSliceService(object):
         ofname = self.server.getOutFileName( gfname, '.%d-%d,%d-%d,%d-%d,%d-%d' % (x1+1,x2+1,y1+1,y2+1,z1+1,z2+1,t1+1,t2+1) )
 
         log.debug('Slice service: to ' +  ofname )
-        imgcnv.convert(ifname, ofname, fmt='tiff', extra='-page 1' )
+        imgcnv.convert(ifname, ofname, fmt=default_format, extra='-page 1' )
 
-        data_token.setImage(ofname, format='tiff')
+        data_token.setImage(ofname, format=default_format)
         return data_token
 
 
@@ -1717,9 +1791,9 @@ class CloseImageService(object):
                 ifname = self.server.getOutFileName( self.server.imagepath(image_id), '.0-0,0-0,%d-%d,%d-%d'%(zi,zi,ti,ti) )
                 log.debug('Close service: ' +  ifname )
                 ifiles.append(ifname)
-        imgcnv.convert_list(ifiles, ofname, fmt='tiff', extra='-multi' )
+        imgcnv.convert_list(ifiles, ofname, fmt=default_format, extra='-multi' )
 
-        data_token.setImage(ofname, format='tiff')
+        data_token.setImage(ofname, format=default_format)
         return data_token
 
 
@@ -1759,6 +1833,7 @@ class ImageServer(object):
                           'default'      : DefaultService(self),
                           'roi'          : RoiService(self),
                           'remap'        : RemapService(self),
+                          'fuse'         : FuseService(self),
                           'depth'        : DepthService(self),
                           'rotate'       : RotateService(self),
                           'tile'         : TileService(self),
@@ -1860,7 +1935,7 @@ class ImageServer(object):
             original = self.originalFileName(id)
             if (not 'width' in info) and (bioformats.supported(filename, original)):
                 if data_token is None: data_token = ProcessToken()
-                data_token.setImage(filename, format='tiff')
+                data_token.setImage(filename, format=default_format)
                 data_token = self.services['bioformats'].action (id, data_token, '')
                 if not data_token.dims is None:
                     info = data_token.dims
@@ -1880,7 +1955,7 @@ class ImageServer(object):
             if not 'tsize'      in info: info['tsize']      = '1'
             if not 'zsize'      in info: info['zsize']      = '1'
             if not 'dimensions' in info: info['dimensions'] = 'X Y C Z T'
-            if not 'format'     in info: info['format']     = 'TIFF'
+            if not 'format'     in info: info['format']     = default_format
             if not 'pages'      in info: info['pages']      = str( int(info['tsize']) * int(info['zsize']) )
 
         if not 'pixelFormat' in info and 'pixelType' in info and 'depth' in info:
@@ -1901,7 +1976,7 @@ class ImageServer(object):
 
         if return_token is True:
             if 'converted_file' in info:
-                data_token.setImage(info['converted_file'], format='tiff')
+                data_token.setImage(info['converted_file'], format=default_format)
             data_token.dims = info
             return data_token
         return info
@@ -1912,7 +1987,7 @@ class ImageServer(object):
         if not 'tsize'      in info: info['tsize']      = '1'
         if not 'zsize'      in info: info['zsize']      = '1'
         if not 'dimensions' in info: info['dimensions'] = 'X Y C Z T'
-        if not 'format'     in info: info['format']     = 'TIFF'
+        if not 'format'     in info: info['format']     = default_format
         if not 'pages'      in info: info['pages']      = str( int(info['tsize']) * int(info['zsize']) )
         if 'width' in info:
             self.setFileInfo( id=id, filename=filename, **info )
@@ -1926,7 +2001,7 @@ class ImageServer(object):
 
         if info is None: return False
         if not 'format' in info: return False
-        if info['format'].lower() == 'tiff': return True
+        if info['format'].lower() == default_format: return True
         return False
 
     def ensureWorkPath(self, path):
@@ -1953,6 +2028,8 @@ class ImageServer(object):
 
     def getOutFileName(self, infilename, appendix):
         ofile = self.ensureWorkPath(infilename)
+        ofile = os.path.relpath(ofile, self.workdir)
+        log.debug('Output filename: %s'%ofile)
         return ofile + appendix
 
     # def addImage(self, src, name, ownerId = None, permission = None, **kw):
@@ -1976,11 +2053,11 @@ class ImageServer(object):
     #         #-raw     - reads RAW image with w,h,c,d,p,e,t, ex: -raw 100,100,3,8,10,0,uint8\n
     #         num_pages = int(kw['zsize'])*int(kw['tsize'])
     #         rawargs = '%s,%s,%s,%s,%s,%s,%s'%( kw['width'], kw['height'], kw['channels'], kw['depth'], num_pages, kw['endian'], kw['type'] )
-    #         imgcnv.convert(tmppath, origpath, fmt='tiff', extra='-multi -raw '+rawargs)
+    #         imgcnv.convert(tmppath, origpath, fmt=default_format, extra='-multi -raw '+rawargs)
     #         self.loginfo (name, image_id)
 
     #         sha1 = file_hash_SHA1( origpath )
-    #         imgtype = 'TIFF'
+    #         imgtype = default_format
     #         flocal = origpath[len(self.imagedir)+1:]
 
     #         blobdb.updateFile (dbid = image_id, original = name, uri = self.geturi(image_id), owner = ownerId, perm = permission, fhash=sha1, ftype=imgtype, flocal=flocal)
@@ -2038,6 +2115,9 @@ class ImageServer(object):
         log.debug (">>>> Request url: %s" % url)
         query = getQuery4Url(url)
         log.debug (">>>> Query: %s by %s" % (query, userId)  )
+        
+        os.chdir(self.workdir)
+        log.debug('Current path: %s'%(self.workdir))
 
         # init the output to a simple file
         data_token = ProcessToken()
@@ -2117,7 +2197,7 @@ class ImageServer(object):
 #            data_token.setHtmlErrorNotFound()
 #            return data_token
 #
-#        data_token.setImage( self.imagepath(image_id), 'tiff' )
+#        data_token.setImage( self.imagepath(image_id), default_format )
 #
 #        # this will pre-convert the image if it's not supported by the imgcnv
 #        # and also set the proper dimensions info

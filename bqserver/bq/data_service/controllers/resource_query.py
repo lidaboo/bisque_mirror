@@ -80,7 +80,7 @@ from bq.util.paths import data_path
 
 from bq  import image_service
 from bq.client_service.controllers import notify_service
-from resource import Resource
+from .resource import Resource
 
 log = logging.getLogger('bq.data_service.query')
 
@@ -389,11 +389,10 @@ def count_special(**kw):
             return count
     return None
 
-def resource_count (resource_type, tag_query, **kw):
+def resource_count (resource_type,  **kw):
     count =   count_special(**kw)
     if count is None:
         query  =  resource_query(resource_type=resource_type,
-                                 tag_query = tag_query,
                                  **kw)
         #count = query.distinct().count()
         count = query.count()
@@ -732,7 +731,7 @@ def resource_permission(resource, action = RESOURCE_READ, user_id=None, with_pub
 
 
 
-def resource_auth (resource, parent, user_id=None, action=RESOURCE_READ, newauth=None):
+def resource_auth (resource, parent, user_id=None, action=RESOURCE_READ, newauth=None,notify=True):
     """View or edit authoization records associated the resource"""
 
     q = session.query (TaggableAcl).filter_by (taggable_id = resource.id)
@@ -829,19 +828,15 @@ def resource_auth (resource, parent, user_id=None, action=RESOURCE_READ, newauth
                     #              display_name=name)
 
                     user = session.query(BQUser).filter_by(resource_name = name).first()
-
                     invite = string.Template(textwrap.dedent(invite_msg)).substitute(
                         common_email,
                         name = name,
                         email = email)
-                    
                     log.debug("AUTH: new user %s" % user)
-                    
                 elif user not in previous_shares:
-                    
                     invite = string.Template(textwrap.dedent(share_msg)).substitute(
-                                        common_email,
-                                        email = email)
+                        common_email,
+                        email = email)
                 else:
                     previous_shares.remove(user)
 
@@ -869,7 +864,7 @@ def resource_auth (resource, parent, user_id=None, action=RESOURCE_READ, newauth
                 #                           action)
 
                 try:
-                    if invite is not None:
+                    if notify and invite is not None:
                         notify_service.send_mail (owner_email,
                                                   email,
                                                   "Invitation to view",

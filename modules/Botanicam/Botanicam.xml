@@ -16,8 +16,17 @@
                     <tag name="label" value="When an input image is selected, you may want to select a sub-region using the 'rectangle' tool if the image has too much background..." />
                     <tag name="gobject" value="rectangle" />
                 </template>
-            </gobject>            
-        </tag>           
+            </gobject>		
+        </tag>    
+		
+		<tag name="plantpart" value="bush" type="combo">
+		    <template>
+                <tag name="label" value="Select a visible part of the plant" />
+				<tag name="editable" value="false" type="boolean" />
+                <tag name="select" value="bush" />
+				<tag name="select" value="leaf" />
+            </template>
+		</tag>
     </tag>
   
     <tag name="outputs">
@@ -41,7 +50,7 @@
     </tag>
 
     <tag name="module_options" >
-        <tag name="version" value="3" />
+        <tag name="version" value="5" />
     </tag>   
 
     <tag name="display_options" >
@@ -53,11 +62,11 @@
         <tag name="css" type="file" value="webapp.css" />
     </tag>    
     
-    <tag name="title" value="Botanicam: The Plant Recognizer" /> 
-    <tag name="authors" value="&lt;a href=&quot;mailto:golnaz.ab@gmail.com&quot;&gt;Golnaz Abdollahian&lt;/a&gt;, Kris Kvilekval and Dmitry Fedorov" />    
+    <tag name="title" value="Botanicam: The Plant Recognizer " /> 
+    <tag name="authors" value="Chris Wheat, Mike Korcha, &lt;a href=&quot;mailto:fedorov@ece.ucsb.edu&quot;&gt;Dmitry Fedorov&lt;/a&gt;, Kris Kvilekval, and alumni Golnaz Abdollahian" />    
     <tag name="help"      type="file" value="public/help.html" />
     <tag name="thumbnail" type="file" value="public/thumbnail.png" />   
-    <tag name="description" type="string" value="This app accepts images of local Santa Barbara plants as input and automatically recognizes their species." />          
-    
+    <!--<tag name="description" type="string" value="This app accepts images of local Santa Barbara plants as input and automatically recognizes their species." />          
+    -->
 
 </module>

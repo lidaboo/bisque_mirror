@@ -26,9 +26,9 @@ setup(
     #url='',
     install_requires=[
         "Pylons==1.0",
-        "WebOb==1.0.8",
+        "WebOb==1.0.8", # WebOb==1.0.8bisque1
         "decorator>=3.3",
-        "TurboGears2==2.1.5",
+        "TurboGears2==2.1.5", #TurboGears2==2.1.5bisque
         "Genshi",
         "zope.sqlalchemy >= 0.4",
         "repoze.tm2 >= 1.0a5",
@@ -42,7 +42,7 @@ setup(
         "repoze.what-pylons >= 1.0",
         "repoze.what.plugins.sql",
         "repoze.who <= 1.99",
-        "tgext.admin >= 0.3.9",
+#        "tgext.admin >= 0.3.9",
         "tw.forms",
 
 
@@ -103,7 +103,6 @@ setup(
 
       [console_scripts]
       bq-admin = bq.commands.admin:main
-      mexrunner = bq.commands.mexrunner:main
       bqdev-upload-binary = bq.commands.uploadbinary:main
       bq-upload-images = bq.commands.uploadimages:main
 

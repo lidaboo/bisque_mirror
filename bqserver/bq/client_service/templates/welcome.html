@@ -11,55 +11,18 @@
     
     <title py:if="not welcome_message">Welcome</title>
     <title py:if="welcome_message">${welcome_message}</title>
-      
-    <script type="text/javascript" src="${tg.url('/client_service/public/js/DataExplore.js')}" ></script>
 
     <link rel="stylesheet" type="text/css" href="${tg.url('/js/carousel/carousel.css')}" />
     <script type="text/javascript" src="${tg.url('/js/carousel/Panel.js')}" ></script>    
 
     <script type="text/javascript" src="${tg.url('/usage/public/bq_usage_stats.js')}" ></script>
     
-    
-    <!--<link rel="stylesheet" type="text/css" href="${tg.url('/extjs/resources/css/ext-all-gray.css')}"/>
-    <link rel="stylesheet" type="text/css" href="${tg.url('/css/bisquik_extjs_fix.css')}" />-->
     <link rel="stylesheet" type="text/css" href="${tg.url('/client_service/public/css/welcome.css')}" />
 
 <style type="text/css" py:if="thumbnail">
-body { 
-    background-image: url('${thumbnail}=800,600');
-    background-size: cover !important;
-    background-origin: content-box;
-}    
-
-/* extjs 4.1 */
-#centerEl-body {
-    background-color: transparent;
-}
-
-/* extjs 4.0.2 */
-#centerEl .x-panel-body {
-    background-color: transparent;    
-}
-
-/*
-.welcome_front { 
-    background-image: url('${thumbnail}=800,600');
-    background-size: cover !important;
-    background-origin: content-box;
-}
-*/
-</style>
-
-<style py:if="not tg.identity" type="text/css">
-.activity {
-    width: 490px;
-}
-</style>
-
-<style py:if="tg.identity" type="text/css">
-.activity {
-    left: 460px;
-}
+    body { 
+        background-image: url('${thumbnail}=800,600');
+    }    
 </style>
 
 <script type="text/javascript">
@@ -77,35 +40,42 @@ body {
         main.body.addCls('welcome_front');
         main.setAutoScroll( false );        
         
-        var usage_stats = Ext.create('BQ.usage.Stats', {});   
-        var usage_uploads = Ext.create('BQ.usage.Uploads', { height: 120, showAxisTitles: false, });   
-        var usage_analysis = Ext.create('BQ.usage.Analysis', {height: 120, showAxisTitles: false, });              
-
-        var usagePanel = Ext.create('Ext.carousel.Panel', {
-            items: [ usage_uploads, usage_analysis, usage_stats, ],      
-        });
-        
         this.usageExplorer = Ext.create('Ext.panel.Panel', {
             renderTo: 'stats', 
             title: 'Bisque usage',
+            header : { cls: 'widget-header', height: 45, },
             width: 350,       
             height: 220,
-            cls: 'box',
+            cls: 'widget',
             collapsible: true,
             collapseDirection: 'left',
             layout: 'fit',
             border: 0, 
             defaults: { border: 0, cls: 'usage', }, 
-            items: [usagePanel],
+            items: [{
+                xtype: 'carouselpanel',
+                items: [{
+                    xtype: 'uploadstats',
+                    height: 120, 
+                    showAxisTitles: false,
+                }, {
+                    xtype: 'analysisstats',
+                    height: 120, 
+                    showAxisTitles: false,                
+                }, {
+                    xtype: 'usagestats',                
+                }],      
+            }],
         });          
   
         this.recentsExplorer = Ext.create('Ext.panel.Panel', {
             renderTo: 'activity', 
             width: '100%',       
             height: '100%',            
-            cls: 'box',
+            cls: 'widget',
+            header : { cls: 'widget-header', height: 45, },
             collapsible: true,
-            collapseDirection: 'bottom',
+            collapseDirection: 'top',
             layout: 'fit',
             border: 0, 
             defaults: { border: 0, cls: 'usage', }, 
@@ -118,11 +88,6 @@ body {
     });      
 
 </script>
-
-<script type="text/javascript" py:if="tg.config.get('server.environment', None) == 'development'" > 
-    BQ.ui.warning( 'This a test environment, all your data may be lost!' );
-</script>
-
 
 <script type="text/javascript" >
     var my_items = [];
@@ -152,39 +117,31 @@ body {
         });
         my_items.push(moduleBrowser);
      
-        var s = '<a href="browser"><img src="';
+    
+        var s = '<img src="';
         s += '${tg.url('/client_service/public/images/browse_80.png')}';
-        s += '" alt="Browse public images" /></a>';
-        s += '<h3><a href="browser">Browse</a></h3>'; 
-        
-        this.imageExplorer = Ext.create('Ext.panel.Panel', {
-            renderTo: 'explore', 
-            title: 'Explore images',
-            width: 400,       
-            height: 255,
-            cls: 'box',
-            collapsible: true,
-            collapseDirection: 'left',
-            layout: 'hbox',
-            border: 0, 
-            defaults: { border: 0, }, 
-            items: [{ html: s, width: 140, height: 230, cls: 'explore' },],
-        });      
+        s += '" alt="Browse public images" />';
+        s += '<h3>Browse</h3>'; 
+
+        var imagesbtn = BQApp.getToolbar().queryById('menu_images');
+        BQ.ui.highlight(imagesbtn.getId(), s, {
+            anchor:'left',
+            width: 150,
+            height: 140,
+        });
+  
     });
 </script>
 
-<script py:if="not tg.identity and welcome_tags" type="text/javascript" >
-
-    Ext.onReady( function() { 
-        var tagsExplorer = Ext.create('Ext.carousel.Panel', {
-            width: 260,
-            height: 200,  
-        }); 
-        this.imageExplorer.add(tagsExplorer);     
-      
-       DataExplore("${welcome_tags}", tagsExplorer);
-    });
+<script py:if="not tg.identity" type="text/javascript" >
+    var tag_query = 'welcome_page:true';
+    var title = 'Featured datasets';
 </script>
+<script py:if="tg.identity" type="text/javascript" >
+    var tag_query = undefined;
+    var title = 'Datasets';    
+</script>
+
 
 <script type="text/javascript" >
     Ext.onReady( function() { 
@@ -204,24 +161,28 @@ body {
         });  
         
         var setBrowser = new Bisque.ResourceBrowser.Browser({
-          layout: Bisque.ResourceBrowser.LayoutFactory.LAYOUT_KEYS.List,
-          title: 'Datasets',
-          viewMode: 'ViewerOnly',
-          tagOrder: '"@ts":desc',          
-          dataset: '/data_service/dataset',
-          selType: 'SINGLE', 
-          showOrganizer: false,      
-          wpublic: false,
-          border: true,
-          cls: 'welcome',          
-          listeners: { 'Select': function(me, resource) { 
-                          window.open(bq.url('/client_service/view?resource='+resource.uri)); 
-                       }, 
-                       scope: this },    
+              layout: Bisque.ResourceBrowser.LayoutFactory.LAYOUT_KEYS.Compact,
+              title: title,
+              viewMode: 'ViewerOnly',
+              tagOrder: '"@ts":desc',          
+              dataset: '/data_service/dataset',
+              selType: 'SINGLE', 
+              showOrganizer: false,      
+              wpublic: false,
+              border: true,
+              cls: 'welcome',          
+              tagQuery: tag_query, 
+              listeners: { 
+                  'Select': function(me, resource) { 
+                      window.open(bq.url('/client_service/view?resource='+resource.uri)); 
+                  }, 
+                  scope: this 
+              },    
         });        
 
+        my_items.push(setBrowser); 
         my_items.push(imgBrowser); 
-        my_items.push(setBrowser);  
+
     });
 </script>
 
@@ -230,7 +191,7 @@ body {
         this.recentsExplorer.setTitle('My recent stuff');
         
         var mexBrowser = new Bisque.ResourceBrowser.Browser({
-          layout: Bisque.ResourceBrowser.LayoutFactory.LAYOUT_KEYS.List,
+          layout: Bisque.ResourceBrowser.LayoutFactory.LAYOUT_KEYS.Grid,
           title : 'Analysis',
           viewMode : 'MexBrowser',
           dataset : '/data_service/mex',
@@ -262,6 +223,7 @@ body {
         }); 
         this.recentsExplorer.add(tabs);     
     });
+    
 </script>
 
 
@@ -269,19 +231,18 @@ body {
 
 <body>
 
-    <div class="box heading" py:if="not tg.identity and welcome_message">
+    <div class="box heading" id="heading" py:if="not tg.identity and welcome_message">
         <h2>${welcome_message}</h2>
     </div>
     
-    <div class="box randomimage" py:if="not tg.identity and imageurl">
+    <div class="box randomimage" id="randomimage" py:if="not tg.identity and imageurl">
         <a href="${imageurl}">Current random image</a>
     </div>
     
-    <div class="exploreimages" py:if="not tg.identity" id="explore" ></div>
-    
     <div class="stats" id="stats"></div>
     
-    <div class="activity" id="activity"></div>
+    <div class="activity intro" id="activity" py:if="not tg.identity"></div>
+    <div class="activity" id="activity" py:if="tg.identity"></div>
 
 </body>
 </html>

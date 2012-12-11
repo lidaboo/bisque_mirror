@@ -64,6 +64,9 @@ bisque.organization = ORG
 bisque.title = BioImage Repository
 bisque.admin_email = admin@nowhere.com
 bisque.welcome_message = Welcome to the Bisque database
+#set environment to development for test/debug
+bisque.environment = development
+#bisque.environment = production
 #bisque.background_query = welcome_background:
 
 # tags used by the front page for site contents overview
@@ -85,6 +88,7 @@ bisque.paths.root  =
 # Ordered list of stores .. path is created based on template
 # bisque.blob_service.stores = irods1,s3,local
 bisque.blob_service.stores=local
+#bisque.blob_service.tmp_upload_dir = installationdir/data/tmp_upload_dir
 bisque.stores.local.path = file:$datadir/imagedir/$user/$dirhash/$filehash-$filename
 #bisque.stores.local.top= file:$datadir/imagedir
 # Example irods store
@@ -122,13 +126,21 @@ bisque.engine =  http://localhost:8080
 #bisque.google_analytics="UA-3923721-1"
 #
 # Login identification  systems
-# note: you must also edit who.ini to enable these 
+# NOTE: you must also edit config/who.ini to enable these 
 #bisque.login.identifiers = cas,google,local
 bisque.login.identifiers = local
 bisque.login.local = /auth_service/login
 #bisque.login.cas = /auth_service/login_handler?login_type=cas
-#bisque.login.google = /auth_service/openid_login_handler
+#bisque.login.google = /auth_service/openid_login_handler?openid_provider=https://www.google.com/accounts/o8/id
 #bisque.password = hashed
+
+# User traffic tracking 
+# You can use google (http://www.google.com/analytics/)  or piwik (http://piwik.org/), etc.  
+bisque.tracking = false
+#piwik
+#piwik.http = http://yourpiwikhost.org
+#piwik.https = https://yourpiwikhost.org
+
 
 # Bisque Cluster Runtime  
 condor.enabled = False
@@ -186,6 +198,9 @@ sqlalchemy.pool_recycle = 3600
 who.config_file = %(here)s/who.ini
 who.log_level = error
 who.log_stream = stdout
+
+
+
 
 # WARNING: *THE LINE BELOW MUST BE UNCOMMENTED ON A PRODUCTION ENVIRONMENT*
 # Debug mode will enable the interactive debugging tool, allowing ANYONE to
