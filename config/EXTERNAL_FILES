@@ -1,0 +1,28 @@
+#  This file contains a list of external binary files to be fetched
+# during system setup.  Each file external file must be in the form 
+# of sha1_filename.ext where sha1 is UPPERCASE SHA1 hex hash of the file contents.
+# 
+# Accessing http://biodev.ece.ucsb.edu/binaries/upload will allow you to place 
+# a file on the binary server and create the correct name.
+# There is also a script bqdev-upload-binary for uploading local files.
+#
+[common]
+#B607E3504810D63D02298529449F0918826FE072-ext-4.0.2a-gpl.zip=extjs.zip
+BEBB0991B63A985A8C31D97942D4395E17F84444-extjs-4.1.1-gpl.zip=extjs.zip
+
+# Bioformats 4.4.7
+8EA77666DD889CE5AEBFB4230B946BA5B5E28AD8-bioformats-pack.zip
+
+
+# PLATFORM dependent files
+# These sections titles use shell like 'glob'ing to match
+# To add a new platform, start up python and do a 
+#   import platform
+#   platform.platform()
+
+[Linux-*-x86_64-*-debian-*]
+511B5E84692B123A89576086201B793C93096A74-libmbgl-linux-64-large.a
+
+[Darwin-10.4.0-*]
+
+

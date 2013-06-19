@@ -1,0 +1,40 @@
+function ImgMovie (viewer,name){
+    this.base = ViewerPlugin;
+    this.base (viewer, name);
+    
+    this.viewer.addMenu({ 
+        itemId: 'menu_viewer_movie', 
+        xtype:'button', 
+        text: 'View as movie', 
+        iconCls: 'movie',
+        tooltip: 'View and export current image as a movie',                 
+        scope: this, 
+        handler: this.showMovie,
+    });
+}
+ImgMovie.prototype = new ViewerPlugin();
+
+ImgMovie.prototype.create = function (parent) {
+    this.parent = parent;
+    return parent;
+}
+
+ImgMovie.prototype.newImage = function () {
+    if (!this.viewer.toolbar) return;
+    var m = this.viewer.toolbar.queryById('menu_viewer_movie');
+    if (m) m.setDisabled(this.viewer.imagedim.z * this.viewer.imagedim.t < 2);
+}
+
+ImgMovie.prototype.updateImage = function () {
+}
+
+ImgMovie.prototype.showMovie = function () {
+    if (this.viewer.imagedim.z * this.viewer.imagedim.t <= 1) {
+        alert ("Image is not a movie (multiplane image)");
+        return;
+    }
+
+    //window.location = '/bisquik/movieplayer?resource='+this.viewer.imageuri;
+    window.open( '/client_service/movieplayer?resource='+this.viewer.imageuri );         
+}
+
