@@ -1,0 +1,32 @@
+syntax: glob
+*~
+*.pyc
+*.class
+*.log
+*.pid
+*.mexa64
+*.mexw64
+*.mexw32
+*.project
+*.ctf
+runtime-bisque.cfg
+build/*
+data/*
+config/*.ini
+bqenv/*
+doc/build/*
+doc/data/*
+external/*
+bqcore/parser.out
+bqcore/parsetab.*
+bqcore/Bisquik.egg-info/*
+bqcore/*-info
+bqcore/doc/generated/*
+bqcore/bq/core/public/extjs/*
+*_mcr/
+local-packages/*
+pydist/*
+
+syntax: regexp
+.*\#.*\#$
+
