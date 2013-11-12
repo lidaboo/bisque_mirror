@@ -777,7 +777,7 @@ def bisquik2db_internal(inputs, parent, resource,  replace):
         log.debug ("returned %s " % str(node))
         log.debug ('modifyed : new (%d), dirty (%d), deleted(%d)' %
                    (len(DBSession.new), len(DBSession.dirty), len(DBSession.deleted)))
-        if not node in DBSession:
+        if node not in DBSession:
             DBSession.add(node)
         results.append(node)
 
