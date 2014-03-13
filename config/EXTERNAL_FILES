@@ -1,0 +1,33 @@
+#  This file contains a list of external binary files to be fetched
+# during system setup.  Each file external file must be in the form 
+# of sha1_filename.ext where sha1 is UPPERCASE SHA1 hex hash of the file contents.
+# 
+# Accessing http://biodev.ece.ucsb.edu/binaries/upload will allow you to place 
+# a file on the binary server and create the correct name.
+# There is also a script bqdev-upload-binary for uploading local files.
+#
+[common]
+#B607E3504810D63D02298529449F0918826FE072-ext-4.0.2a-gpl.zip=extjs.zip
+#BEBB0991B63A985A8C31D97942D4395E17F84444-extjs-4.1.1-gpl.zip=extjs.zip
+06B0FFFCAFA78EBE6843BDAADB14939554A85B66-ext-4.2.1-gpl.zip=extjs.zip
+
+# Bioformats 4.4.7
+8EA77666DD889CE5AEBFB4230B946BA5B5E28AD8-bioformats-pack.zip
+
+
+# PLATFORM dependent files
+# These sections titles use shell like 'glob'ing to match
+# To add a new platform, start up python and do a 
+#   import platform
+#   platform.platform().replace('-', '-%s-'%platform.architecture()[0], 1)
+
+[Windows-64bit-*]
+683E4322844C4A5C40571D92150A7F98211AF08F-imgcnv-Windows-64bit.zip=imgcnv.zip
+6B6B4CFD84B96E78173CD991EE529A652FB913CE-feature_extractors-Windows-64bit.zip=feature_extractors.zip
+
+[Linux-64bit-*-debian-*]
+511B5E84692B123A89576086201B793C93096A74-libmbgl-linux-64-large.a
+3DC0C3E6F3E87EEFD4E3799832EF63C81D32B1A2-feature_extractors-Linux-64bit.zip=feature_extractors.zip
+
+[Darwin-64bit-*]
+
