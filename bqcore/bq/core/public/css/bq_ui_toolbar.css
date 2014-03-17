@@ -1,0 +1,142 @@
+/**************************************************************************/
+/*  */
+/**************************************************************************/
+
+.toolbar-main {
+    background-color: transparent;
+    border: 0px;
+    background: -moz-linear-gradient(top,  rgba(233,243,255,1) 0%, rgba(136,185,234,0.92) 50%, rgba(119,168,226,0) 100%);
+    background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,rgba(233,243,255,1)), color-stop(50%,rgba(136,185,234,0.92)), color-stop(100%,rgba(119,168,226,0)));
+    background: -webkit-linear-gradient(top,  rgba(233,243,255,1) 0%,rgba(136,185,234,0.92) 50%,rgba(119,168,226,0) 100%);
+    background: -o-linear-gradient(top,  rgba(233,243,255,1) 0%,rgba(136,185,234,0.92) 50%,rgba(119,168,226,0) 100%);
+    background: -ms-linear-gradient(top,  rgba(233,243,255,1) 0%,rgba(136,185,234,0.92) 50%,rgba(119,168,226,0) 100%);
+    background: linear-gradient(to bottom,  rgba(233,243,255,1) 0%,rgba(136,185,234,0.92) 50%,rgba(119,168,226,0) 100%);
+    filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#e9f3ff', endColorstr='#0077a8e2',GradientType=0 );
+}
+
+.toolbar-main h3 {
+  font-size: 22px;
+  font-weight: normal;
+  /*font-stretch: condensed;
+  font-family: 'Varela Round', sans-serif;*/
+  /*font-family: tahoma,arial,verdana,sans-serif;*/
+  font-family: 'Abel', tahoma, arial, verdana, sans-serif;
+}
+
+.toolbar-main a {
+  color: #666666;
+}
+
+.toolbar-main a:hover {
+	color: #C60;
+}
+
+.x-menu-body .menu-heading {
+    padding: 5px 5px 3px 5px;
+    font-family: Georgia, serif;
+}
+
+.toolbar-main .x-box-menu-right {
+    /*height: 32px;  */
+}
+
+.toolbar-main .x-btn-default-toolbar-large .x-btn-inner {
+    font-size: 18px;
+    font-family: 'Abel', tahoma, arial, verdana, sans-serif;
+}
+
+/*******************************************************************/
+
+.loginmenu {
+    padding: 5px 10px 5px 10px;
+}
+
+.loginmenu .x-panel-body-default {
+    background: transparent;
+}
+
+/******************************************************************
+ Menus
+******************************************************************/
+
+.toolbar-menu .x-menu-body {
+    background-color: rgba(201, 213, 224, 0.92) !important;
+}
+
+.toolbar-menu .x-menu-body .x-menu-item-separator {
+    background-color: #B3CBE0;
+    border-top-width: 0px;
+}
+
+/******************************************************************
+ Buttons
+******************************************************************/
+
+.toolbar-menu .x-btn-default-medium .x-btn-inner {
+    font-size: 16px;
+}
+
+.toolbar-menu .icon-user {
+    background-image: url('/images/toolbar/user.png');
+}
+
+/******************************************************************
+ Images
+******************************************************************/
+
+.toolbar-menu .image-about-bisque {
+    width: 200px;
+    height: 56px;
+    margin: 10px 10px 10px 10px;
+}
+
+.toolbar-main .image-logo-bisque {
+    width: 90px;
+    height: 25px;
+    margin: 0px 10px 0px 5px;
+}
+
+/******************************************************************
+ Icons
+******************************************************************/
+
+.toolbar-main .icon-help {
+    background-image: url('/images/toolbar/help.png');
+}
+
+.toolbar-main .icon-user {
+    background-image: url('/images/toolbar/user.png');
+}
+
+.toolbar-main .icon-browse {
+    background-image: url('/images/toolbar/browse.png');
+}
+
+.toolbar-main .icon-export {
+    background-image: url('/images/toolbar/download.png') !important;
+}
+
+.toolbar-main .icon-import {
+    background-image: url('/images/toolbar/upload.png') !important;
+}
+
+.toolbar-main .icon-services {
+    background-image: url('/images/toolbar/services.png');
+}
+
+.toolbar-main .icon-create {
+    background-image: url('/images/toolbar/plus.png');
+}
+
+.toolbar-menu img {
+    background-size: 16px;
+}
+
+.toolbar-menu .icon-import {
+    background-image: url('/images/toolbar/upload.png') !important;
+}
+
+.toolbar-menu .icon-export {
+    background-image: url('/images/toolbar/download.png') !important;
+}
+
