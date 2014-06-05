@@ -124,7 +124,7 @@ class TransferTimer(Timer):
         self.path = path
     def __exit__(self, *args):
         Timer.__exit__(self, *args)
-        if log.isEnabledFor(logging.INFO):
+        if self.path and log.isEnabledFor(logging.INFO):
             log.info (transfer_msg (self.path, self.interval))
 
 
@@ -511,7 +511,7 @@ class BlobServer(RestController, ServiceMixin):
                 path,sub = self.drive_man.fetch_blob(blob_id)
                 log.debug('using %s full=%s localpath=%s sub=%s' , uniq_ident, blob_id, path, sub)
                 return path,sub        
-        raise IllegalOperation("bad resource value %s" % uniq_ident)
+        return None
 
     def originalFileName(self, ident):
         log.debug ('originalFileName: deprecated %s', ident)

@@ -1156,6 +1156,19 @@ requires this while, upgraded system may depending on chnages""")!="Y":
 
 
 #######################################################
+
+def install_public_static(params):
+    "Setup up public JS area with all static resources"
+    cmd = ['bq-admin', 'deploy', 'public' ]
+    r  = subprocess.call (cmd, stderr = None)
+    if r!=0:
+        print "Problem deploying static resources .. run bq-admin deploy public manually"
+    return params
+
+
+
+
+#######################################################
 #
 def setup_uwsgi(params, server_params):
     if getanswer("Install uwsgi (application server and configs)", 'N',
@@ -1523,7 +1536,7 @@ def send_installation_report(params):
     parts.append(text)
     parts.append(str(params))
     if os.path.exists('bisque-install.log'):
-        parts.append (remove_control_chars (open ('bisque-install.log','r').read()))
+        parts.append (remove_control_chars (open('bisque-install.log','r').read()))
 
     try:
         msg = turbomail.Message(sender_email, "bisque-install@biodev.ece.ucsb.edu", "Installation report")
@@ -1581,6 +1594,7 @@ install_options= [
            'mail',
            'preferences',
            'admin',
+           'production'
            ]
 
 
@@ -1680,6 +1694,8 @@ def bisque_installer(options, args):
         params = install_mail(params)
     if 'preferences' in installer:
         params = install_preferences(params)
+    if 'production' in installer:
+        params = install_public_static(params)
 
 
     #if options.admin:
