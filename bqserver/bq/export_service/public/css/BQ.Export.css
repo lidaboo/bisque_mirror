@@ -1,0 +1,79 @@
+.tools {
+    /*background-color: white;*/
+    padding: 10px 10px 10px 15px;
+}
+
+.tools .x-btn-default-large {
+    border-color: #CCCCCC;
+    padding: 6px;
+}
+
+.tools .x-btn-inner {
+    font-size: 14px;
+}
+
+.footer {
+    padding: 10px 10px 10px 15px;
+}
+
+.footer .x-btn-default-large {
+    border-color: #CCCCCC;
+    padding: 6px;
+}
+
+.footer .x-btn-inner {
+    font-size: 14px;
+}
+
+.footer .checkbox {
+    margin-left: 30px;
+}
+
+.thumbnail {
+    margin: 0px 10px 0px 10px;
+    width: 40px;
+    height: 40px;
+    background-image: url('/js/ResourceBrowser/Images/file.svg');
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center;
+}
+
+.thumbnail.dataset {
+    background-image: url('/js/ResourceBrowser/Images/folder.svg');
+}
+
+.thumbnail.dir {
+    background-image: url('/js/ResourceBrowser/Images/folder.svg');
+}
+
+.thumbnail.image {
+    background-image: initial;
+}
+
+/* Icons */
+
+.icon-select-images {
+    background-image: url('../images/select-images.png') !important;
+}
+
+.icon-select-dataset {
+    background-image: url('../images/select-dataset.png') !important;
+}
+
+.icon-download {
+    background-image: url('/images/toolbar/download.png') !important;
+}
+
+.icon-gdocs {
+    background-image: url('../images/gdocs.png') !important;
+}
+
+.icon-delete-cross {
+    background-image: url('../images/delete.png') !important;
+}
+
+.align {
+    vertical-align: middle;
+}
+
