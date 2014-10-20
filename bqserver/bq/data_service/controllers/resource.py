@@ -101,6 +101,17 @@ def urlnorm(uri):
     authority = authority and authority.lower() or ""
     scheme = scheme and scheme.lower() or ""
     path = path or "/"
+
+    # Put special queries first for invalidations"
+    ql = query.split('&')
+    for qi in ql:
+        for qn in [ 'tag_values', 'tag_query', 'tag_names', 'gob_types']:
+            if qi.startswith(qn):
+                # move it to the front
+                ql.insert(0, ql.pop(ql.index(qi)))
+                break
+    query = "&".join(ql)
+
     # Could do syntax based normalization of the URI before
     # computing the digest. See Section 6.2.2 of Std 66.
     request_uri = query and "?".join([path, query]) or path
@@ -156,6 +167,8 @@ class BaseCache(object):
         pass
     def invalidate(self, url, user, files=None):
         pass
+    def invalidate_resource(self, resource, user):
+        pass
     def modified(self, url, user):
         return None
     def etag (self, url, user):
@@ -172,7 +185,13 @@ class ResponseCache(object):
 
     def _cache_name (self, url, user):
         scheme, authority, request_uri, defrag_uri = urlnorm(url)
-        return safename ( defrag_uri, user )
+        return safename ( defrag_uri, user ).replace(',data_service','').replace(',,',',').replace(',#','#')
+
+    def _resource_cache_name(self, resource, user):
+        return "%s,%s" % (user if user else '',  resource.resource_uniq if resource else '')
+    def _resource_query_names(self, resource, user, *args):
+        base = "%s,%s" % (user if user else '', resource.resource_type if resource else '')
+        return [ base ] + [ "#".join ([base, arg]) for arg in args ]
 
     def save(self, url, headers, value,user):
         cachename = os.path.join(self.cachepath, self._cache_name(url, user))
@@ -302,8 +321,6 @@ class HierarchicalCache(ResponseCache):
         super(HierarchicalCache, self).invalidate (
             ''.join([scheme, "://" , authority , request_uri]),
             '*', files,exact=True )
-
-
         # while splitpath:
         #     path = '/'.join(splitpath)
         #     request_uri = query and "?".join([path, query]) or path
@@ -322,15 +339,76 @@ class HierarchicalCache(ResponseCache):
         #     # POST /data_service/images/2/gobjects/
         #     # then GET /data_service/images/2?view=deep
         #     # we are seeing a container
-
         #     # if numeric then break
         #     if pid and pid[0] not in string.ascii_letters:
         #         break
-
         #     # Current code just deletes all up until the top level object.
         #     # Could be made better by deletes all view=deeps ?
         #     #if len(splitpath) <=3:
         #     #    break
+
+
+
+    def invalidate_resource(self, resource, user):
+        """ Invalidate cached files and queries for a resource
+
+        A resource can sqlalchemy query, Taggable, or a resource_type tuple
+
+
+        # a simple resource invalidates:
+           1.  The resource document and any subdocuments
+                  USER,00-UNIQ....
+           2.  Any query associated with  resource_type
+                  USER, TYPE#....
+           if published then delete all public queries
+        """
+        from sqlalchemy.orm import Query
+        from bq.data_service.model import Taggable
+
+        if isinstance(resource, tuple):
+            parent = getattr(tg.request.bisque,'parent', None)
+            #log.debug ("invalidate: tuple using %s", parent) #provokes logging error
+            if parent:
+                resource = parent
+            else:
+                # The a pure form i.e. /data_service/image with a POST
+                resource = Bunch(resource_uniq = None, resource_type = resource [0], permission="published")
+        if isinstance(resource, Query):
+            resource = resource.first()
+        if isinstance(resource, Taggable):
+            resource = resource.document
+        if not hasattr (resource, 'resource_uniq'):
+            log.error ("invalidate: Cannot determine resource %s",  resource)
+            return
+        log.debug ("CACHE invalidate: %s %s", resource.resource_uniq, user)
+
+        files = os.listdir(self.cachepath)
+        cache_name = self._resource_cache_name(resource, user)
+        query_names = self._resource_query_names(resource, user, 'tag_values', 'tag_query', 'tag_names', 'gob_types')
+        log.info ("CACHE invalidate %s for %s %s:%s" , resource.resource_uniq , user, cache_name, query_names)
+        # invalidate cached resource varients
+        def delete_matches (files, names, user):
+            for f in files:
+                cf = f.split(',',1)[1] if user is None else f
+                if any ( cf.startswith(qn) for qn in names ):
+                    try:
+                        os.unlink (os.path.join(self.cachepath, f))
+                    except OSError:
+                        # File was removed by other process
+                        pass
+                    files.remove (f)
+                    log.debug ('cache  remove %s' % f)
+
+        names  = [ cache_name ]
+        names.extend (query_names)
+        # Delete user matches
+        delete_matches ( files, names, user)
+        # Split off user and remove global queries
+        # NOTE: we may only need to do this when resource invalidated was "published"
+        if True: # resource.permission == 'published':
+            names = [ qnames.split(',',1)[1] for qnames in query_names]
+            delete_matches ( files, names, None)
+
 
 
 def parse_http_date(timestamp_string):
@@ -464,6 +542,10 @@ class Resource(ServiceController):
     def invalidate(self, url):
         self.server_cache.invalidate(url, user=identity.get_user_id())
 
+    def invalidate_resource(self, resource):
+        self.server_cache.invalidate_resource(resource, user=identity.get_user_id())
+
+
     @expose()
     def _default(self, *path, **kw):
         request = tg.request
@@ -574,10 +656,12 @@ class Resource(ServiceController):
                     # Raise illegal operation (you should provide XML)
                     log.debug ("Bad media type in post/put:%s" % content)
                     abort(415, "Bad media type in post/put:%s" % content )
-                self.server_cache.invalidate(request.url, user=user_id)
+                #self.server_cache.invalidate(request.url, user=user_id)
+                self.server_cache.invalidate_resource(resource, user=user_id)
             elif http_method == 'delete':
+                self.server_cache.invalidate_resource(resource, user=user_id)
                 value = method(resource, **kw)
-                self.server_cache.invalidate(request.url, user=user_id)
+                #self.server_cache.invalidate(request.url, user=user_id)
             elif  http_method == 'get':
                 headers, value = self.server_cache.fetch(request.url, user=user_id)
                 if value:

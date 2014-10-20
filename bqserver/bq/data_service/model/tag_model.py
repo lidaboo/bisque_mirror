@@ -334,8 +334,9 @@ class Taggable(object):
             return "%s/%s/%s" % (self.parent.uri , self.resource_type, self.id)
             #return "%s/%s" % (self.resource_type, self.id)
         else:
+            return "%s" % (self.resource_uniq)
             #return "%s/%s" % (self.resource_type, self.resource_uniq)
-            return "%s/%s" % (self.resource_type, self.id)
+            #return "%s/%s" % (self.resource_type, self.id)
 
     uri = property(uri)
 
@@ -1011,7 +1012,7 @@ def registration_hook(action, **kw):
                 bquser = BQUser.new_user (u.email_adress)
             dn = bq_user.findtag('display_name', create=True)
             dn.value = tg_user.display_name
-
+            dn.permission = 'published'
             #bquser.display_name = u.display_name
             bquser.resource_name = u.user_name
             log.error('Fix the display_name')

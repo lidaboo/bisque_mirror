@@ -253,7 +253,7 @@ Ext.define('Bisque.ResourceTagger', {
 
         this.tree = Ext.create('Ext.tree.Panel', {
             layout: 'fit',
-            flex: 1,
+            flex: 2,
             useArrows: true,
             rootVisible: false,
             border: false,
@@ -632,7 +632,7 @@ Ext.define('Bisque.ResourceTagger', {
 
     addTags: function () {
         var currentItem = this.tree.getSelectionModel().getSelection();
-        var editor = this.tree.plugins[0];
+        var editor = this.rowEditor || this.tree.plugins[1];
 
         if (currentItem.length)// None selected -> add tag to parent document
             currentItem = currentItem[0];
@@ -999,8 +999,8 @@ Ext.define('Bisque.GObjectTagger', {
             collapsible: true,
             border: 0,
             dock: 'top',
-            //height: 250,
-            flex: 1,
+            height: 300,
+            //flex: 1,
             listeners: {
                 scope: this,
                 'select': this.fireGobEvent,

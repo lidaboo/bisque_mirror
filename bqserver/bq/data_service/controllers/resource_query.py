@@ -956,7 +956,10 @@ def resource_auth (resource, action=RESOURCE_READ, newauth=None, notify=True, in
 
                 user = None
                 if user_url:
-                    user = DBSession.query(BQUser).get (int (user_url.rsplit('/', 1)[1]))
+                    try:
+                        user = DBSession.query(BQUser).get (int (user_url.rsplit('/', 1)[1]))
+                    except ValueError:
+                        user = DBSession.query(BQUser).filter_by (resource_uniq= (user_url.rsplit('/', 1)[1])).first()
                 if not user and email:
                     user = DBSession.query(BQUser).filter_by(resource_value=unicode(email)).first()
 
@@ -1000,7 +1003,6 @@ def resource_auth (resource, action=RESOURCE_READ, newauth=None, notify=True, in
                         common_email,
                         name = name,
                         email = email)
-                    log.debug("AUTH: new user %s" , user.id)
                 elif user not in previous_shares:
                     invite = string.Template(textwrap.dedent(share_msg)).substitute(
                         common_email,
@@ -1026,7 +1028,8 @@ def resource_auth (resource, action=RESOURCE_READ, newauth=None, notify=True, in
                 shares.append(acl)
                 acl.action = action
                 if invalidate:
-                    Resource.hier_cache.invalidate ('/', user = user.id)
+                    #Resource.hier_cache.invalidate ('/', user = user.id)
+                    Resource.hier_cache.invalidate_resource (None, user = user.id)
 
                 try:
                     if notify and invite is not None:
@@ -1041,7 +1044,8 @@ def resource_auth (resource, action=RESOURCE_READ, newauth=None, notify=True, in
         resource.acl = shares
         if invalidate:
             for user in set(previous_shares) - set(current_shares):
-                Resource.hier_cache.invalidate ('/', user = user.id)
+                #Resource.hier_cache.invalidate ('/', user = user.id)
+                Resource.hier_cache.invalidate_resource (None, user = user.id)
         DBSession.flush()
 
     return []
@@ -1062,7 +1066,8 @@ def resource_delete(resource, user_id=None):
         q = q.filter (TaggableAcl.user_id == user_id)
         q.delete()
         log.debug('deleting acls reource_owner(%s) delete(%s) %s' % (resource.owner_id, user_id, q))
-        Resource.hier_cache.invalidate ('/', user = user_id)
+        Resource.hier_cache.invalidate_resource (q, user = user_id)
+        #Resource.hier_cache.invalidate ('/', user = user_id)
         return
     # owner so first delete all referneces.
     # ACL, values etc..
@@ -1080,7 +1085,7 @@ def resource_delete(resource, user_id=None):
     if link:
         log.debug ('removing link %s %s from store', link.resource_name, link.resource_uniq)
         DBSession.delete(link)
-        Resource.hier_cache.invalidate ('/data_service/'+link.uri, user = user_id)
+        Resource.hier_cache.invalidate_resource (link, user = user_id)
     # Finally delete resource
     DBSession.delete(resource)
     DBSession.flush()
