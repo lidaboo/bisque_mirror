@@ -1,0 +1,45 @@
+BisQue dough 0.5.7:
+Tile retreival in seconds, avg: 0.918539996147 max: 3.38399982452 min: 0.591000080109, std: 0.793536578412
+Tile retreival in seconds, avg: 0.133559999466 max: 0.18499994278 min: 0.128000020981, std: 0.00798537707001
+
+BisQue loup 0.5.7:
+Tile retreival in seconds, avg: 0.897779998779 max: 2.67800021172 min: 0.661999940872, std: 0.580030829752
+Tile retreival in seconds, avg: 0.119299998283 max: 0.223999977112 min: 0.109000205994, std: 0.0201387724739
+
+BisQue loup 0.5.8 dylib:
+
+planar:
+Tile retreival in seconds, avg: 0.405620002747 max: 2.29700016975 min: 0.171000003815, std: 0.622654655777
+Tile retreival in seconds, avg: 0.106859998703 max: 0.188999891281 min: 0.0910000801086, std: 0.0140328442002
+
+pyramidal:
+Tile retreival in seconds, avg: 0.219819998741 max: 0.43799996376 min: 0.177000045776, std: 0.0472159649414
+Tile retreival in seconds, avg: 0.105840001106 max: 0.125 min: 0.0929999351501, std: 0.00745484230563
+
+
+entire pipeline:
+
+planar:
+Tile retreival in seconds, avg: 0.554599995613 max: 2.98400020599 min: 0.25, std: 0.802151292881
+Tile retreival in seconds, avg: 0.143340001106 max: 0.157999992371 min: 0.125, std: 0.00731738909674
+
+pyramidal:
+Tile retreival in seconds, avg: 0.306220002174 max: 0.621999979019 min: 0.264999866486, std: 0.0799598142316
+Tile retreival in seconds, avg: 0.145499997139 max: 0.25 min: 0.12900018692, std: 0.0162040125661
+
+DYLIB entire pipeline:
+
+planar:
+Tile retreival in seconds, avg: 0.452859997749 max: 2.71099996567 min: 0.18700003624, std: 0.719729603196
+Tile retreival in seconds, avg: 0.109879999161 max: 0.125 min: 0.0939998626709, std: 0.00518706398346
+
+pyramidal:
+Tile retreival in seconds, avg: 0.218559999466 max: 0.313000202179 min: 0.186999797821, std: 0.0320831421614
+Tile retreival in seconds, avg: 0.111480002403 max: 0.128999948502 min: 0.0939998626709, std: 0.00668203185509
+
+DYLIB entire pipeline -blob_service:
+Tile retreival in seconds, avg: 0.426180000305 max: 2.75 min: 0.161999940872, std: 0.71543630587
+Tile retreival in seconds, avg: 0.113559999466 max: 0.25 min: 0.105999946594, std: 0.0198878461193
+
+Tile retreival in seconds, avg: 0.195900001526 max: 0.287999868393 min: 0.171000003815, std: 0.0298095543748
+Tile retreival in seconds, avg: 0.112179999352 max: 0.125 min: 0.108999967575, std: 0.00602226016397
