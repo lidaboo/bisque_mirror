@@ -1,0 +1,84 @@
+/*
+  Slider styles for BQ.slider.Slider
+
+  Author: Dima Fedorov <dimin@dimin.net> <http://www.dimin.net/>
+  Copyright (C) Center for BioImage Informatics <www.bioimage.ucsb.edu>
+  GNU General Public License Usage
+
+  History:
+    2011-08-17 15:40:08 - first creation
+
+  Ver: 1
+*/
+
+.slider {
+    position:absolute;
+    z-index: 30;
+}
+
+.tslider {
+    right: 150px;
+    bottom: 25px;
+}
+
+.zslider {
+    right: 15px;
+    bottom: 150px;
+}
+
+.slider .button {
+    background-image: url('/core/js/slider/images/icons_slider.svg');
+    background-size: 200px;
+    background-repeat: no-repeat;
+    background-color: transparent;
+    border: 0 none;
+    background-position: -35px 0px;
+}
+
+.slider .play {
+    background-position: -35px 0px;
+}
+
+.slider .play-vertical {
+    background-position: -35px -98px;
+}
+
+.slider .x-play-selected, .slider .x-btn-play-selected {
+    background-position: -69px 0px;
+}
+
+.slider .x-play-vertical-selected, .slider .x-btn-play-vertical-selected {
+    background-position: -69px -98px;
+}
+
+.slider .next {
+    background-position: -35px -65px;
+}
+
+.slider .next-vertical {
+    background-position: -35px -164px;
+}
+
+.slider .x-next-selected, .slider .x-btn-next-selected {
+    background-position: -70px -65px;
+}
+
+.slider .x-next-vertical-selected, .slider .x-btn-next-vertical-selected {
+    background-position: -70px -164px;
+}
+
+.slider .prev {
+    background-position: -35px -33px;
+}
+
+.slider .prev-vertical {
+    background-position: -35px -132px;
+}
+
+.slider .x-prev-selected, .slider .x-btn-prev-selected {
+    background-position: -70px -33px;
+}
+
+.slider .x-prev-vertical-selected, .slider .x-btn-prev-vertical-selected {
+    background-position: -70px -132px;
+}
